@@ -120,7 +120,8 @@ async def measure_whine(message: Message):
             "Поскулил как фанат чмотраса, а фанаты чмотраса хуесосы, минус вайб",
             "Это был не скулёж, а зевок. Учись скулить у чмани и пхуесоса.",
             "Ты начал ныть, но подавился слюной. Но хоть не малафьей! Нахуй с пляжа",
-            "Паскудный скулеж, как будто ты не поскулить решил а пососать, штраф!"
+            "Паскудный скулеж, как будто ты не поскулить решил а пососать, штраф!", 
+           "Иди на Гави так скули, припиздыш! Штраф!"
         ]
 
         db_loss = random.randint(1, 5)
@@ -170,7 +171,7 @@ async def leaderboard(message: Message):
     await message.answer(text, parse_mode="Markdown")
 
 
-@dp.message(Command("skuli_bet"))
+@dp.message(Command("skulibet"))
 async def casino_bet(message: Message):
     user_id = message.from_user.id
     user_data = get_user(user_id)
@@ -180,7 +181,7 @@ async def casino_bet(message: Message):
     # Разбираем команду: /skuli_bet 100
     parts = message.text.split()
     if len(parts) < 2 or not parts[1].isdigit():
-        return await message.answer(f"⚠️ {user_tag}, пиши сумму ставки числом!\nПример: `/skuli_bet 50`",
+        return await message.answer(f"⚠️ {user_tag}, пиши сумму ставки числом!\nПример: `/skulibet 50`",
                                     parse_mode="Markdown")
 
     bet = int(parts[1])
