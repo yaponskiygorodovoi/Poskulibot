@@ -129,11 +129,11 @@ async def measure_whine(message: Message):
         )
     else:
         # ПРИБАВКА
-        db_gain = random.randint(10, 200)
+        db_gain = random.randint(10, 50)
         update_user(user_id, whine_score=db_gain, update_time=True)
         new_total = current_total + db_gain
 
-        mood = "🤫 Тихое поскуливание" if db_gain < 40 else "📢 Скулишь пиздец!" if db_gain > 100 else "🫨 Средний вой"
+        mood = "🤫 Тихое поскуливание" if db_gain < 40 else "📢 Скулишь пиздец!" if db_gain > 40 else "🫨 Средний вой"
 
         await message.answer(
             f"📈 {user_tag}, замер: **{db_gain} дБ**\nℹ️ Статус: {mood}\nВсего накоплено: **{new_total} дБ**",
