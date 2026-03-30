@@ -5,9 +5,12 @@ import time
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import Message
+import os
+TOKEN = os.getenv("BOT_TOKEN")
+bot = Bot(token=TOKEN)
 
 # --- НАСТРОЙКИ ---
-TOKEN = 'BOT_TOKEN'
+
 DB_NAME = 'whine_bot.db'
 COOLDOWN_MINUTES = 5  # Твой новый кулдаун
 
