@@ -145,7 +145,7 @@ async def measure_whine(message: Message):
             parse_mode="Markdown")
 
 
-@dp.message(Command("skuli_bet"))
+@dp.message(Command("skulibet"))
 async def casino_bet(message: Message):
     user_id, chat_id = message.from_user.id, message.chat.id
     user_data = get_user(user_id, chat_id)
@@ -154,7 +154,7 @@ async def casino_bet(message: Message):
 
     parts = message.text.split()
     if len(parts) < 2 or not parts[1].isdigit():
-        return await message.answer(f"⚠️ {user_tag}, пиши сумму: `/skuli_bet 50`", parse_mode="Markdown")
+        return await message.answer(f"⚠️ {user_tag}, пиши сумму: `/skulibet 50`", parse_mode="Markdown")
 
     bet = int(parts[1])
     if bet <= 0: return await message.answer("⚠️ Ставка должна быть > 0")
