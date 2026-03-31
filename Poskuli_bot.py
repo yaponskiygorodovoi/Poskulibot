@@ -15,7 +15,7 @@ if not os.path.exists("/data"):
     DB_PATH = "poskuli.db"
 def get_db_connection():
     return sqlite3.connect(DB_PATH)
-DB_NAME = 'whine_bot.db'
+DB_NAME = '/data/whine_bot.db' 
 COOLDOWN_MINUTES = 5  # Твой новый кулдаун
 
 bot = Bot(token=TOKEN)
