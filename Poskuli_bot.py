@@ -13,7 +13,7 @@ if not os.path.exists("/data"):
     DB_NAME = "whine_bot.db"
 
 # --- НАСТРОЙКИ БОТА ---
-TOKEN = 'BOT_TOKEN'
+TOKEN = os.getenv('BOT_TOKEN')
 COOLDOWN_MINUTES = 5
 
 bot = Bot(token=TOKEN)
