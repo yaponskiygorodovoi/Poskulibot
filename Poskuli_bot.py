@@ -185,11 +185,19 @@ async def change_name(message: Message):
 @dp.message(Command("top_skuli"))
 async def leaderboard(message: Message):
     top = get_leaderboard(message.chat.id)
-    if not top: return await message.answer("📭 В чате пусто.")
+    if not top: 
+        return await message.answer("📭 В чате пусто.")
+    
     text = "🏆 **ТОП НЫТИКОВ ЧАТА:**\n\n"
-    for i, (n, t, u_id) in enumerate(top, 1):
+    for i, (name, total, u_id) in enumerate(top, 1):
+        # Присваиваем медали первым трем местам
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-        text += f"{medal} [{n}](tg://user?id={u_id}) — `{t} дБ` накоплено\n"
+        
+        # Убираем [n](tg://user?id=u_id) и оставляем просто n (имя)
+        # Также добавили экранирование, чтобы спецсимволы в никах не ломали Markdown
+        safe_name = name.replace("_", "\\_").replace("*", "\\*")
+        text += f"{medal} {safe_name} — `{total} дБ` накоплено\n"
+        
     await message.answer(text, parse_mode="Markdown")
 
 
