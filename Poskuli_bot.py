@@ -1,4 +1,5 @@
 import random
+from aiogram import F
 import sqlite3
 import asyncio
 import time
@@ -190,6 +191,71 @@ async def leaderboard(message: Message):
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
         text += f"{medal} [{n}](tg://user?id={u_id}) — `{t} дБ` накоплено\n"
     await message.answer(text, parse_mode="Markdown")
+
+
+
+# --- БЛОК МАГАЗИНА (TELEGRAM STARS) ---
+
+@dp.message(Command("shop"))
+async def show_shop(message: Message):
+    """Меню магазина со списком товаров"""
+    user_id, chat_id = message.from_user.id, message.chat.id
+    user_data = get_user(user_id, chat_id)
+    
+    # Проверка, зарегистрирован ли юзер
+    if user_data[0] is None:
+        return await message.answer("⚠️ Сначала нажми /skulistart, чтобы завести счет!")
+
+    text = (
+        "🏪 **Магазин Скулежа**\n\n"
+        "Здесь можно купить мощный буст за Telegram Stars ⭐️\n\n"
+        "📦 **Товар:** Пакет «Слули как фанаты Реала!»\n"
+        "➕ **Бонус:** +100 дБ на твой счет\n"
+        "💰 **Цена:** 50 ⭐️\n\n"
+        "Чтобы купить, нажми кнопку ниже:"
+    )
+    
+    # Создаем кнопку для оплаты
+    builder = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="Купить 100 дБ (50 ⭐️)", pay=True)]
+    ])
+
+    await message.answer_invoice(
+        title="100 дБ Скулежа",
+        description="Мгновенное пополнение твоего счета на 100 дБ.",
+        payload="buy_100_db",
+        currency="XTR", # Код для Telegram Stars
+        prices=[types.LabeledPrice(label="100 дБ", amount=50)], # 50 звезд
+        reply_markup=builder
+    )
+
+@dp.pre_checkout_query()
+async def process_pre_checkout(pre_checkout_query: types.PreCheckoutQuery):
+    """Подтверждение транзакции (обязательно в течение 10 сек)"""
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+
+@dp.message(F.successful_payment)
+async def process_successful_payment(message: Message):
+    """Логика после успешного списания звезд"""
+    if message.successful_payment.invoice_payload == "buy_100_db":
+        user_id, chat_id = message.from_user.id, message.chat.id
+        
+        # Начисляем покупку
+        update_user(user_id, chat_id, whine_score=100)
+        
+        # Получаем обновленные данные для вывода баланса
+        name, total, _ = get_user(user_id, chat_id)
+        
+        await message.answer(
+            f"🥳 **Сделка века совершена!**\n\n"
+            f"[{name}](tg://user?id={user_id}), тебе зачислено **100 дБ**.\n"
+            f"Твой новый баланс: **{total} дБ**.\n"
+            "Иди и ной громче всех! 🗣",
+            parse_mode="Markdown"
+        )
+
+
+
 
 
 async def main():
