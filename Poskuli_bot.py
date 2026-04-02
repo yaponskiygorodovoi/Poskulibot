@@ -258,14 +258,23 @@ async def measure_whine(message: Message):
 
     # После замера ранг проверяется автоматически внутри update_score
 
-
 @dp.message(Command("skulibet"))
 async def bet(message: Message, command: CommandObject):
-    u = get_u(message.from_user.id, message.chat.id)
-    if not command.args or not command.args.isdigit(): return
-    val = int(command.args)
-    if val > u['total'] or val <= 0: return await message.answer("Бичара из Кантеры Реала, дБ не хватает! Пришло время уходишь в Хетафе!")
+    # ПРАВКА: оставляем только message.from_user.id
+    u = get_u(message.from_user.id) 
+    
+    if not u: 
+        return await message.answer("⚠️ Сначала нажми /skulistart!")
 
+    if not command.args or not command.args.isdigit(): 
+        return await message.answer("⚠️ Пиши сумму: `/skulibet 50`", parse_mode="Markdown")
+
+    val = int(command.args)
+    # Используем u['total'] вместо current_total
+    if val > u['total'] or val <= 0: 
+        return await message.answer("Бичара из Кантеры Реала, дБ не хватает! Пришло время уходить в Хетафе!")
+
+    # Дальше твоя логика шансов...
     cfg = RANKS.get(u['status'], RANKS['user'])
     if u['status'] == "architect": cfg = RANKS['bronze']
 
@@ -274,17 +283,23 @@ async def bet(message: Message, command: CommandObject):
 
     if random.random() < chance:
         win = int(val * (1.2 if is_all else 2.0))
-        if not is_all and random.random() > 0.90:  # Джекпот
+        # Твои джекпоты и куши...
+        if not is_all and random.random() > 0.90:
             win = val * 4
             msg = f"🎰 ДЖЕКПОТ! БОГИ СЛЫШАТ ТВОЙ СКУЛЁЖ! ТЫ ЛАМИН ЯМАЛЬ : **+{win} дБ**!"
         else:
-            msg = f"🎰 КУШ! : **+{win} дБ**!"
-        await update_score(message.from_user.id, message.chat.id, win - val)
+            msg = f"🎰 КУШ! КАК ЖЕ ТЫ ЕБЕШЬ БОЖЕ! : **+{win} дБ**!"
+        
+        # ПРАВКА: убираем chat_id из вызова update_score
+        await update_score(message.from_user.id, win - val)
         await message.answer(msg, parse_mode="Markdown")
     else:
-        cb = int(val * cfg['cb'])
-        await update_score(message.from_user.id, message.chat.id, -val + cb)
+        cb = int(val * cfg.get('cb', 0))
+        # ПРАВКА: убираем chat_id из вызова update_score
+        await update_score(message.from_user.id, -val + cb)
         await message.answer(f"🎰 Ставка **{val} дБ** сгорела, иди скули! Кэшбек: {cb}", parse_mode="Markdown")
+
+
 
 
 @dp.message(Command("skuliname"))
