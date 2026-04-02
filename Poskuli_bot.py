@@ -135,7 +135,7 @@ def set_user_name(uid, new_name):
 
 
 
-def get_global_leaderboard(limit=15):
+def get_global_leaderboard(limit=20):
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
     # Берем топ игроков по всей таблице, независимо от чата
@@ -289,17 +289,32 @@ async def change_name(message: Message, command: CommandObject):
 
 @dp.message(Command("grant"), F.from_user.id == ARCHITECT_ID)
 async def grant(message: Message, command: CommandObject):
-    if not message.reply_to_message or not command.args.isdigit(): return
-    amt = int(command.args);
+    # Проверка: ответил ли ты на сообщение и ввел ли сумму
+    if not message.reply_to_message or not command.args or not command.args.isdigit(): 
+        return await message.answer("⚠️ Ответь на сообщение и введи сумму: `/grant 5000`", parse_mode="Markdown")
+    
+    amt = int(command.args)
     tid = message.reply_to_message.from_user.id
-    conn = sqlite3.connect(DB_NAME);
-    conn.execute('UPDATE settings SET value = value - ? WHERE key = "vault"', (amt,));
-    conn.commit();
+    
+    # 1. Списываем из скрытой казны
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute('UPDATE settings SET value = value - ? WHERE key = "vault"', (amt,))
+    conn.commit()
     conn.close()
-    await update_score(tid, message.chat.id, amt)
+    
+    # 2. Начисляем игроку (БЕЗ chat_id)
+    await update_score(tid, amt)
+    
+    # 3. Регистрируем его в этом чате (чтобы он не вылетал из топа чата)
+    register_in_chat(tid, message.chat.id)
+    
+    # 4. Удаляем следы и пафосно отвечаем
     await message.delete()
     await message.answer(
-        f"⚡️ **Глас Асгарда**\n\nТы скулил так, что тебя услышали в Асгарде, тебе послали бонус **{amt} дБ**!")
+        f"⚡️ **Глас Асгарда**\n\n"
+        f"Ты скулил так, что тебя услышали в Асгарде, тебе послали бонус **{amt} дБ**!"
+    )
+
 
 
 @dp.message(Command("topskuli"))
@@ -321,7 +336,7 @@ async def top_chat(message: Message):
 @dp.message(Command("topglobal"))
 async def global_top_handler(message: Message):
     user_id = message.from_user.id
-    top_users = get_global_leaderboard(15)
+    top_users = get_global_leaderboard(20)
 
     if not top_users:
         return await message.answer("🌌 Во вселенной скулеж еще не зафиксирован.")
