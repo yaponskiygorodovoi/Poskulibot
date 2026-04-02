@@ -400,17 +400,23 @@ async def change_name(message: Message, command: CommandObject):
 
     await message.answer(f"🤝 К сожалению, теперь ты: **{safe_name}**", parse_mode="Markdown")
 
+
 @dp.message(Command("grant"))
 async def god_grant(message: Message, command: CommandObject):
     user_id = message.from_user.id
-
+    
     # 1. ПРОВЕРКА: Если это ТЫ (Архитектор)
     if user_id == ARCHITECT_ID:
         if not message.reply_to_message or not command.args or not command.args.isdigit():
-            return
-
+            return 
+        
         amt = int(command.args)
-        target_id = message.reply_to_message.from_user.id
+        target = message.reply_to_message.from_user
+        target_id = target.id
+
+        # ОПРЕДЕЛЯЕМ ТЕГ (чтобы не было NameError)
+        t_name = target.first_name.replace("<", "&lt;").replace(">", "&gt;")
+        target_tag = f'<a href="tg://user?id={target_id}">{t_name}</a>'
 
         conn = sqlite3.connect(DB_NAME)
         cur = conn.cursor()
@@ -428,24 +434,28 @@ async def god_grant(message: Message, command: CommandObject):
         conn.close()
 
         register_in_chat(target_id, message.chat.id)
+        
+        # Сначала удаляем команду, потом шлем ответ
         await message.delete()
+        
+        # ИСПРАВЛЕНО: Один await и корректный текст
         await message.answer(
-              await message.answer(
             f"⚡️ <b>Глас Асгарда</b>\n\n"
             f"{target_tag}, ты скулил так, что тебя услышали в Асгарде! "
             f"Тебе послали бонус <b>{amt} дБ</b>!",
             parse_mode="HTML"
         )
+        
         await update_score(target_id, 0)
-        return  # Выходим, чтобы не сработали проверки ниже
+        return
 
-    # 2. ПРОВЕРКА: Если пробует кто-то другой
+    # 2. ПРОВЕРКА: Если пробует кто-то другой (остается как было)
     u = get_u(user_id)
-    # Проверяем флаг покупки (is_premium)
     if u and u.get('is_p'):
         await message.answer("Прости, премиальный нытик, но для тебя это скрытая функция 🥷")
     else:
         await message.answer("Асгард разгневан, иди скули чушкан!🐷")
+
 
 
 @dp.message(Command("topskuli"))
