@@ -146,6 +146,15 @@ async def update_score(uid, amt, upd_t=False):
         conn.commit()
         conn.close()
 
+def register_in_chat(uid, cid):
+    conn = sqlite3.connect(DB_NAME)
+    # Запоминаем, что этот юзер скулит в этом конкретном чате
+    conn.execute('INSERT OR IGNORE INTO chat_members (user_id, chat_id) VALUES (?, ?)', (uid, cid))
+    conn.commit()
+    conn.close()
+
+
+
 
 def set_user_name(uid, new_name):
     conn = sqlite3.connect(DB_NAME)
@@ -189,7 +198,12 @@ async def start(message: Message):
 @dp.message(Command("poskuli"))
 async def measure_whine(message: Message):
     user_id = message.from_user.id
-    # ГЛОБАЛЬНО: получаем данные только по user_id
+    chat_id = message.chat.id
+
+    # 1. Сразу регистрируем юзера в этом чате (чтобы работал ТОП чата)
+    register_in_chat(user_id, chat_id)
+
+    # 2. ГЛОБАЛЬНО: получаем данные только по user_id
     u = get_u(user_id)
 
     if not u:
@@ -197,7 +211,7 @@ async def measure_whine(message: Message):
 
     name, current_total, last_time = u['name'], u['total'], u['last']
     
-    # Расчет Кулдауна (5 минут)
+    # 3. Расчет Кулдауна (5 минут)
     current_time = int(time.time())
     wait_time = (last_time + COOLDOWN_MINUTES * 60) - current_time
     
@@ -212,11 +226,11 @@ async def measure_whine(message: Message):
             parse_mode="Markdown"
         )
 
-    # Берем конфиг ранга (множитель)
+    # 4. Берем конфиг ранга (множитель)
     cfg = RANKS.get(u['status'], RANKS['user'])
     multiplier = cfg.get('multiplier', 1.0)
 
-    # Шанс штрафа (20%)
+    # 5. Шанс штрафа (20%)
     if random.random() < 0.20:
         fails = [
             "Прибор определил это как полная хуета. 🥺 К сожалению, штраф!🫵🤡",
@@ -233,7 +247,7 @@ async def measure_whine(message: Message):
             "Что это за дрисня?🤡 Иди поплачь!🤡"
         ]
         db_loss = random.randint(1, 5)
-        # ВАЖНО: передаем только user_id и amt
+        # ВАЖНО: передаем только user_id и сумму
         await update_score(user_id, -db_loss, upd_t=True)
 
         await message.answer(
@@ -241,7 +255,7 @@ async def measure_whine(message: Message):
             parse_mode="Markdown"
         )
     else:
-        # Прибавка (10-200) * множитель статуса
+        # 6. Прибавка (10-200) * множитель статуса
         base_gain = random.randint(10, 200)
         db_gain = int(base_gain * multiplier)
         
@@ -254,7 +268,6 @@ async def measure_whine(message: Message):
             f"📈 {user_tag}, замер: **{db_gain} дБ**{bonus_text}\nℹ️ Статус: {mood}\nВсего накоплено: **{current_total + db_gain} дБ**",
             parse_mode="Markdown"
         )
-
 
     # После замера ранг проверяется автоматически внутри update_score
 
@@ -324,44 +337,50 @@ async def change_name(message: Message, command: CommandObject):
     await message.answer(f"🤝 К сожалению, теперь ты: **{safe_name}**", parse_mode="Markdown")
 
 
-@dp.message(Command("grant"), F.from_user.id == ARCHITECT_ID)
+@dp.message(Command("grant"))
 async def god_grant(message: Message, command: CommandObject):
-    if not message.reply_to_message or not command.args or not command.args.isdigit():
-        return # Игнорируем, если не ответ на сообщение или нет суммы
+    user_id = message.from_user.id
+    
+    # 1. ПРОВЕРКА: Если это ТЫ (Архитектор)
+    if user_id == ARCHITECT_ID:
+        if not message.reply_to_message or not command.args or not command.args.isdigit():
+            return 
+        
+        amt = int(command.args)
+        target_id = message.reply_to_message.from_user.id
 
-    amt = int(command.args)
-    target_id = message.reply_to_message.from_user.id
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute('SELECT value FROM settings WHERE key = "vault"')
+        vault_res = cur.fetchone()
+        vault_val = vault_res[0] if vault_res else 0
 
-    conn = sqlite3.connect(DB_NAME)
-    cur = conn.cursor()
+        if vault_val < amt:
+            conn.close()
+            return await message.answer("🏦 Казна Асгарда пуста!")
 
-    # Проверяем остаток в казне
-    cur.execute('SELECT value FROM settings WHERE key = "vault"')
-    vault_val = cur.fetchone()[0]
-
-    if vault_val < amt:
+        conn.execute('UPDATE settings SET value = value - ? WHERE key = "vault"', (amt,))
+        conn.execute('UPDATE users SET total_whine = total_whine + ? WHERE user_id = ?', (amt, target_id))
+        conn.commit()
         conn.close()
-        return await message.answer("🏦 Казна Асгарда пуста!")
 
-    # Списываем из казны, начисляем игроку
-    conn.execute('UPDATE settings SET value = value - ? WHERE key = "vault"', (amt,))
-    conn.execute('UPDATE users SET total_whine = total_whine + ? WHERE user_id = ?', (amt, target_id))
-    conn.commit()
-    conn.close()
+        register_in_chat(target_id, message.chat.id)
+        await message.delete()
+        await message.answer(
+            f"⚡️ <b>Глас Асгарда</b>\n\n"
+            f"Ты скулил так, что тебя услышали в Асгарде, тебе послали бонус <b>{amt} дБ</b>!"
+        )
+        await update_score(target_id, 0)
+        return # Выходим, чтобы не сработали проверки ниже
 
-    # Регистрируем игрока в чате (чтобы он был в /topskuli)
-    register_in_chat(target_id, message.chat.id)
+    # 2. ПРОВЕРКА: Если пробует кто-то другой
+    u = get_u(user_id)
+    # Проверяем флаг покупки (is_premium)
+    if u and u.get('is_p'):
+        await message.answer("Прости, премиальный нытик, но для тебя это скрытая функция 🥷")
+    else:
+        await message.answer("Асгард разгневан, иди скули чушкан!🐷")
 
-    # Удаляем команду Архитектора (скрытность)
-    await message.delete()
-
-    # Пафосное уведомление
-    await message.answer(
-        f"⚡️ <b>Глас Асгарда</b>\n\n"
-        f"Ты скулил так, что тебя услышали в Асгарде, тебе послали бонус <b>{amt} дБ</b>!"
-    )
-    # Обновляем ранг счастливчика
-    await update_score(target_id, 0) 
 
 
 
