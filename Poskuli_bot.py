@@ -338,7 +338,7 @@ async def global_top_handler(message: Message):
 
         # Особая подсветка для тебя
         if uid == ARCHITECT_ID:
-            text += f"🌚🔧 **Архитектор** — `{total} дБ`\n"
+            text += f"🌚🔧 **{safe_name}** — `{total} дБ`\n"
         else:
             # Выводим: 1. 🥈 Иван — 50000 дБ
             text += f"{i}. {prefix} {safe_name} — `{total} дБ`\n"
