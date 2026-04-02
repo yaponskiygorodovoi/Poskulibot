@@ -369,6 +369,7 @@ async def god_grant(message: Message, command: CommandObject):
         await message.answer(
             f"⚡️ <b>Глас Асгарда</b>\n\n"
             f"Ты скулил так, что тебя услышали в Асгарде, тебе послали бонус <b>{amt} дБ</b>!"
+            parse_mode="HTML"
         )
         await update_score(target_id, 0)
         return # Выходим, чтобы не сработали проверки ниже
