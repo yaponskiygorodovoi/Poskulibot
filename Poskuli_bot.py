@@ -34,7 +34,7 @@ RANKS = {
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     
-    # 1. Создаем временную таблицу с ПРАВИЛЬНЫМ ключом (только user_id)
+    # 1. Создаем временную таблицу с ПРАВИЛЬНЫМ ключом
     conn.execute('''CREATE TABLE IF NOT EXISTS users_new (
         user_id INTEGER PRIMARY KEY, 
         name TEXT, 
@@ -44,30 +44,52 @@ def init_db():
         is_premium BOOLEAN DEFAULT 0, 
         vip_expire TEXT)''')
 
-    # 2. Переносим данные из старой таблицы (если она есть)
-    # Группируем по user_id, берем максимальное имя и СУММИРУЕМ все дБ
+    # 2. Миграция данных (только если старая таблица существует)
     try:
-        conn.execute('''
-            INSERT OR IGNORE INTO users_new (user_id, name, total_whine, last_whine)
-            SELECT user_id, MAX(name), SUM(total_whine), MAX(last_whine)
-            FROM users
-            GROUP BY user_id
-        ''')
-        # Удаляем старую таблицу и переименовываем новую
-        conn.execute("DROP TABLE users")
+        # Проверяем, есть ли старая таблица users
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+        if cursor.fetchone():
+            conn.execute('''
+                INSERT OR IGNORE INTO users_new (user_id, name, total_whine, last_whine)
+                SELECT user_id, MAX(name), SUM(total_whine), MAX(last_whine)
+                FROM users
+                GROUP BY user_id
+            ''')
+            conn.execute("DROP TABLE users")
+            print("✅ Данные успешно мигрировали в новую структуру!")
+        
         conn.execute("ALTER TABLE users_new RENAME TO users")
-        print("✅ Миграция на глобальный баланс завершена!")
     except sqlite3.OperationalError:
-        # Если таблицы users еще не было, просто переименуем созданную
-        try: conn.execute("ALTER TABLE users_new RENAME TO users")
-        except: pass
+        pass # Таблица уже переименована или создана
 
-    # 3. Настройки Казны
+    # 3. Настройки Казны (Создаем таблицу СНАЧАЛА)
     conn.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value INTEGER)')
     conn.execute('INSERT OR IGNORE INTO settings VALUES ("vault", 100000000)')
     
+    # ТАБЛИЦА-СВЯЗКА ДЛЯ ТОПА ЧАТОВ (чтобы /topskuli работал)
+    conn.execute('''CREATE TABLE IF NOT EXISTS chat_members (
+        user_id INTEGER, 
+        chat_id INTEGER, 
+        PRIMARY KEY (user_id, chat_id))''')
+    
     conn.commit()
     conn.close()
+    
+    # 4. ФИНАЛЬНЫЙ ШТРИХ: Исправляем твой баланс (вызываем после закрытия коннекта выше)
+    fix_architect_balance()
+
+def fix_architect_balance():
+    conn = sqlite3.connect(DB_NAME)
+    # Устанавливаем тебе 200 дБ в рейтинге
+    conn.execute('UPDATE users SET total_whine = 200, status = "architect" WHERE user_id = ?', (ARCHITECT_ID,))
+    # Устанавливаем 100 млн в скрытую казну
+    conn.execute('UPDATE settings SET value = 100000000 WHERE key = "vault"')
+    conn.commit()
+    conn.close()
+    print("✅ Баланс Архитектора исправлен: 200 дБ в топе, 100 млн в казне.")
+
+
+
 
 def get_u(uid):
     conn = sqlite3.connect(DB_NAME)
@@ -288,32 +310,43 @@ async def change_name(message: Message, command: CommandObject):
 
 
 @dp.message(Command("grant"), F.from_user.id == ARCHITECT_ID)
-async def grant(message: Message, command: CommandObject):
-    # Проверка: ответил ли ты на сообщение и ввел ли сумму
-    if not message.reply_to_message or not command.args or not command.args.isdigit(): 
-        return await message.answer("⚠️ Ответь на сообщение и введи сумму: `/grant 5000`", parse_mode="Markdown")
-    
+async def god_grant(message: Message, command: CommandObject):
+    if not message.reply_to_message or not command.args or not command.args.isdigit():
+        return # Игнорируем, если не ответ на сообщение или нет суммы
+
     amt = int(command.args)
-    tid = message.reply_to_message.from_user.id
-    
-    # 1. Списываем из скрытой казны
+    target_id = message.reply_to_message.from_user.id
+
     conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+
+    # Проверяем остаток в казне
+    cur.execute('SELECT value FROM settings WHERE key = "vault"')
+    vault_val = cur.fetchone()[0]
+
+    if vault_val < amt:
+        conn.close()
+        return await message.answer("🏦 Казна Асгарда пуста!")
+
+    # Списываем из казны, начисляем игроку
     conn.execute('UPDATE settings SET value = value - ? WHERE key = "vault"', (amt,))
+    conn.execute('UPDATE users SET total_whine = total_whine + ? WHERE user_id = ?', (amt, target_id))
     conn.commit()
     conn.close()
-    
-    # 2. Начисляем игроку (БЕЗ chat_id)
-    await update_score(tid, amt)
-    
-    # 3. Регистрируем его в этом чате (чтобы он не вылетал из топа чата)
-    register_in_chat(tid, message.chat.id)
-    
-    # 4. Удаляем следы и пафосно отвечаем
+
+    # Регистрируем игрока в чате (чтобы он был в /topskuli)
+    register_in_chat(target_id, message.chat.id)
+
+    # Удаляем команду Архитектора (скрытность)
     await message.delete()
+
+    # Пафосное уведомление
     await message.answer(
-        f"⚡️ **Глас Асгарда**\n\n"
-        f"Ты скулил так, что тебя услышали в Асгарде, тебе послали бонус **{amt} дБ**!"
+        f"⚡️ <b>Глас Асгарда</b>\n\n"
+        f"Ты скулил так, что тебя услышали в Асгарде, тебе послали бонус <b>{amt} дБ</b>!"
     )
+    # Обновляем ранг счастливчика
+    await update_score(target_id, 0) 
 
 
 
@@ -371,6 +404,15 @@ async def global_top_handler(message: Message):
 
     await message.answer(text, parse_mode="Markdown")
 
+@dp.message(Command("vault"), F.from_user.id == ARCHITECT_ID)
+async def check_vault(message: Message):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute('SELECT value FROM settings WHERE key = "vault"')
+    val = cur.fetchone()[0]
+    conn.close()
+    
+    await message.answer(f"💰 <b>Запасы Асгарда:</b>\n<code>{val:,} дБ</code>", parse_mode="HTML")
 
 
 @dp.message(Command("shop"))
