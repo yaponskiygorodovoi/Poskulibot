@@ -53,38 +53,59 @@ def init_db():
     conn.close()
 
 
-def get_u(uid, cid):
+def get_u(uid):
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
+    # Убрали chat_id и добавили запятую после uid
     cur.execute(
-        'SELECT name, total_whine, last_whine, status, is_premium, vip_expire FROM users WHERE user_id = ? AND chat_id = ?',
-        (uid, cid))
+        'SELECT name, total_whine, last_whine, status, is_premium, vip_expire FROM users WHERE user_id = ?',
+        (uid,)
+    )
     r = cur.fetchone()
     conn.close()
     if not r: return None
-    return {"name": r[0], "total": r[1], "last": r[2], "status": r[3], "is_p": r[4], "exp": r[5]}
+    return {
+        "name": r[0], 
+        "total": r[1], 
+        "last": r[2], 
+        "status": r[3], 
+        "is_p": r[4], 
+        "exp": r[5]
+    }
 
 
 
-async def update_score(uid, cid, amt, upd_t=False):
+async def update_score(uid, amt, upd_t=False):
     conn = sqlite3.connect(DB_NAME)
-    conn.execute('UPDATE users SET total_whine = total_whine + ? WHERE user_id = ? AND chat_id = ?', (amt, uid, cid))
-    if upd_t: conn.execute('UPDATE users SET last_whine = ? WHERE user_id = ? AND chat_id = ?',
-                           (int(time.time()), uid, cid))
+    # УБРАЛИ AND chat_id = ?, чтобы баланс обновлялся везде сразу
+    conn.execute('UPDATE users SET total_whine = total_whine + ? WHERE user_id = ?', (amt, uid))
+    
+    if upd_t: 
+        conn.execute('UPDATE users SET last_whine = ? WHERE user_id = ?',
+                       (int(time.time()), uid))
     conn.commit()
     conn.close()
-    # Авто-ранг
-    u = get_u(uid, cid)
-    if uid == ARCHITECT_ID or (u['is_p'] and u['exp'] and datetime.fromisoformat(u['exp']) > datetime.now()): return
+
+    # Авто-ранг: вызываем get_u тоже только с одним аргументом uid
+    u = get_u(uid)
+    if not u: return
+    
+    # Защита для Архитектора или купленного VIP
+    if uid == ARCHITECT_ID or (u['is_p'] and u['exp'] and datetime.fromisoformat(u['exp']) > datetime.now()): 
+        return
+
+    # Логика определения нового ранга
     new_s = "user"
     for r_k, r_v in RANKS.items():
         if u['total'] >= r_v['thresh']:
             new_s = r_k
             break
+            
     if u['status'] != new_s:
-        conn = sqlite3.connect(DB_NAME);
-        conn.execute('UPDATE users SET status = ? WHERE user_id = ? AND chat_id = ?', (new_s, uid, cid));
-        conn.commit();
+        conn = sqlite3.connect(DB_NAME)
+        # Обновляем статус глобально для юзера
+        conn.execute('UPDATE users SET status = ? WHERE user_id = ?', (new_s, uid))
+        conn.commit()
         conn.close()
 
 
