@@ -51,6 +51,17 @@ def init_db():
     conn.execute('INSERT OR IGNORE INTO settings VALUES ("vault", 100000000)')
     conn.commit()
     conn.close()
+def cleanup_duplicates():
+    conn = sqlite3.connect(DB_NAME)
+    # Оставляем только одну запись для каждого пользователя с максимальным балансом
+    conn.execute('''
+        DELETE FROM users 
+        WHERE rowid NOT IN (
+            SELECT rowid FROM users GROUP BY user_id HAVING max(total_whine)
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
 
 def get_u(uid):
