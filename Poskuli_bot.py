@@ -33,36 +33,41 @@ RANKS = {
 # --- БД (ИНТЕГРАЦИЯ НОВЫХ ПОЛЕЙ) ---
 def init_db():
     conn = sqlite3.connect(DB_NAME)
-    # Добавляем новые колонки в старую таблицу (если их нет)
+    
+    # 1. Создаем временную таблицу с ПРАВИЛЬНЫМ ключом (только user_id)
+    conn.execute('''CREATE TABLE IF NOT EXISTS users_new (
+        user_id INTEGER PRIMARY KEY, 
+        name TEXT, 
+        total_whine INTEGER DEFAULT 0, 
+        last_whine INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'user', 
+        is_premium BOOLEAN DEFAULT 0, 
+        vip_expire TEXT)''')
+
+    # 2. Переносим данные из старой таблицы (если она есть)
+    # Группируем по user_id, берем максимальное имя и СУММИРУЕМ все дБ
     try:
-        conn.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'user'")
-    except:
-        pass
-    try:
-        conn.execute("ALTER TABLE users ADD COLUMN is_premium BOOLEAN DEFAULT 0")
-    except:
-        pass
-    try:
-        conn.execute("ALTER TABLE users ADD COLUMN vip_expire TEXT")
-    except:
-        pass
-    # Таблица для Казны Архитектора
+        conn.execute('''
+            INSERT OR IGNORE INTO users_new (user_id, name, total_whine, last_whine)
+            SELECT user_id, MAX(name), SUM(total_whine), MAX(last_whine)
+            FROM users
+            GROUP BY user_id
+        ''')
+        # Удаляем старую таблицу и переименовываем новую
+        conn.execute("DROP TABLE users")
+        conn.execute("ALTER TABLE users_new RENAME TO users")
+        print("✅ Миграция на глобальный баланс завершена!")
+    except sqlite3.OperationalError:
+        # Если таблицы users еще не было, просто переименуем созданную
+        try: conn.execute("ALTER TABLE users_new RENAME TO users")
+        except: pass
+
+    # 3. Настройки Казны
     conn.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value INTEGER)')
     conn.execute('INSERT OR IGNORE INTO settings VALUES ("vault", 100000000)')
+    
     conn.commit()
     conn.close()
-def cleanup_duplicates():
-    conn = sqlite3.connect(DB_NAME)
-    # Оставляем только одну запись для каждого пользователя с максимальным балансом
-    conn.execute('''
-        DELETE FROM users 
-        WHERE rowid NOT IN (
-            SELECT rowid FROM users GROUP BY user_id HAVING max(total_whine)
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
 
 def get_u(uid):
     conn = sqlite3.connect(DB_NAME)
