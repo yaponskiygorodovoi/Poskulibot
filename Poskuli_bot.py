@@ -320,6 +320,7 @@ async def top_chat(message: Message):
 
 @dp.message(Command("topglobal"))
 async def global_top_handler(message: Message):
+    user_id = message.from_user.id
     top_users = get_global_leaderboard(15)
 
     if not top_users:
@@ -329,24 +330,32 @@ async def global_top_handler(message: Message):
     text += "________________________________\n\n"
 
     for i, (name, total, status, uid) in enumerate(top_users, 1):
-        # Экранируем спецсимволы в именах, чтобы Markdown не ломался
         safe_name = name.replace("_", "\\_").replace("*", "\\*")
-
-        # Определяем иконку и подпись статуса из нашего конфига RANKS
         rank_info = RANKS.get(status, RANKS['user'])
-        prefix = rank_info['label'].split()[-1]  # Берем только эмодзи из лейбла
-
-        # Особая подсветка для тебя
+        
+        # Определяем эмодзи статуса
         if uid == ARCHITECT_ID:
-            text += f"🌚🔧 **{safe_name}** — `{total} дБ`\n"
+            prefix = "🌚🔧"
+            # Для Архитектора пишем его НИК и номер места
+            text += f"{i}. {prefix} **{safe_name}** — `{total} дБ`\n"
         else:
-            # Выводим: 1. 🥈 Иван — 50000 дБ
+            prefix = rank_info['label'].split()[-1]
             text += f"{i}. {prefix} {safe_name} — `{total} дБ`\n"
 
+    # --- БЛОК ОПРЕДЕЛЕНИЯ ТВОЕГО МЕСТА ---
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    # Считаем, сколько людей имеют баланс больше твоего
+    cur.execute('SELECT COUNT(*) + 1 FROM users WHERE total_whine > (SELECT total_whine FROM users WHERE user_id = ?)', (user_id,))
+    user_rank = cur.fetchone()[0]
+    conn.close()
+
     text += "\n________________________________\n"
+    text += f"👤 Твоё место в мировом рейтинге: **#{user_rank}**\n"
     text += "ℹ️ *Рейтинг един для всех чатов*"
 
     await message.answer(text, parse_mode="Markdown")
+
 
 
 @dp.message(Command("shop"))
