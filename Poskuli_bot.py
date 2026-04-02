@@ -12,7 +12,6 @@ if not os.path.exists("/data"):
 # --- НАСТРОЙКИ БОТА ---
 TOKEN = os.getenv('BOT_TOKEN')
 
-
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
@@ -21,28 +20,53 @@ COOLDOWN_MINUTES = 5
 
 # Конфиг уровней
 RANKS = {
-    "omnipotent": {"thresh": 1500000, "price": 1500, "label": "Всемогущий 🌌", "chance": 0.50, "all_in": 0.85, "cb": 0.25, "multiplier": 2.5},
-    "diamond": {"thresh": 500000, "price": 1000, "label": "Бог 💎", "chance": 0.49, "all_in": 0.83, "cb": 0.20, "multiplier": 2.0},
-    "gold": {"thresh": 100000, "price": 500, "label": "Ангел 👑", "chance": 0.48, "all_in": 0.81, "cb": 0.15, "multiplier": 1.5},
-    "silver": {"thresh": 30000, "price": 150, "label": "МС 🌠", "chance": 0.46, "all_in": 0.79, "cb": 0.10, "multiplier": 1.2},
-    "bronze": {"thresh": 10000, "price": 50, "label": "КМС 🚀", "chance": 0.44, "all_in": 0.77, "cb": 0.05, "multiplier": 1.1},
-    "user": {"thresh": 0, "price": 0, "label": "Новичок 👤", "chance": 0.42, "all_in": 0.75, "cb": 0.00, "multiplier": 1.0}
+    "omnipotent": {"thresh": 1500000, "price": 1500, "label": "Всемогущий 🌌", "chance": 0.50, "all_in": 0.85,
+                   "cb": 0.25, "multiplier": 2.5},
+    "diamond": {"thresh": 500000, "price": 1000, "label": "Бог 💎", "chance": 0.49, "all_in": 0.83, "cb": 0.20,
+                "multiplier": 2.0},
+    "gold": {"thresh": 100000, "price": 500, "label": "Ангел 👑", "chance": 0.48, "all_in": 0.81, "cb": 0.15,
+             "multiplier": 1.5},
+    "silver": {"thresh": 30000, "price": 150, "label": "МС 🌠", "chance": 0.46, "all_in": 0.79, "cb": 0.10,
+               "multiplier": 1.2},
+    "bronze": {"thresh": 10000, "price": 50, "label": "КМС 🚀", "chance": 0.44, "all_in": 0.77, "cb": 0.05,
+               "multiplier": 1.1},
+    "user": {"thresh": 0, "price": 0, "label": "Новичок 👤", "chance": 0.42, "all_in": 0.75, "cb": 0.00,
+             "multiplier": 1.0}
 }
 
 
 # --- БД (ИНТЕГРАЦИЯ НОВЫХ ПОЛЕЙ) ---
 def init_db():
     conn = sqlite3.connect(DB_NAME)
-    
+
     # 1. Создаем временную таблицу с ПРАВИЛЬНЫМ ключом
-    conn.execute('''CREATE TABLE IF NOT EXISTS users_new (
-        user_id INTEGER PRIMARY KEY, 
-        name TEXT, 
-        total_whine INTEGER DEFAULT 0, 
-        last_whine INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'user', 
-        is_premium BOOLEAN DEFAULT 0, 
-        vip_expire TEXT)''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS users_new
+                    (
+                        user_id
+                        INTEGER
+                        PRIMARY
+                        KEY,
+                        name
+                        TEXT,
+                        total_whine
+                        INTEGER
+                        DEFAULT
+                        0,
+                        last_whine
+                        INTEGER
+                        DEFAULT
+                        0,
+                        status
+                        TEXT
+                        DEFAULT
+                        'user',
+                        is_premium
+                        BOOLEAN
+                        DEFAULT
+                        0,
+                        vip_expire
+                        TEXT
+                    )''')
 
     # 2. Миграция данных (только если старая таблица существует)
     try:
@@ -50,34 +74,52 @@ def init_db():
         cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
         if cursor.fetchone():
             conn.execute('''
-                INSERT OR IGNORE INTO users_new (user_id, name, total_whine, last_whine)
-                SELECT user_id, MAX(name), SUM(total_whine), MAX(last_whine)
-                FROM users
-                GROUP BY user_id
-            ''')
+                         INSERT
+                         OR IGNORE INTO users_new (user_id, name, total_whine, last_whine)
+                         SELECT user_id, MAX(name), SUM(total_whine), MAX(last_whine)
+                         FROM users
+                         GROUP BY user_id
+                         ''')
             conn.execute("DROP TABLE users")
             print("✅ Данные успешно мигрировали в новую структуру!")
-        
+
         conn.execute("ALTER TABLE users_new RENAME TO users")
     except sqlite3.OperationalError:
-        pass # Таблица уже переименована или создана
+        pass  # Таблица уже переименована или создана
 
     # 3. Настройки Казны (Создаем таблицу СНАЧАЛА)
     conn.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value INTEGER)')
     conn.execute('INSERT OR IGNORE INTO settings VALUES ("vault", 100000000)')
-    
-    # ТАБЛИЦА-СВЯЗКА ДЛЯ ТОПА ЧАТОВ (чтобы /topskuli работал)
-    conn.execute('''CREATE TABLE IF NOT EXISTS chat_members (
-        user_id INTEGER, 
-        chat_id INTEGER, 
-        PRIMARY KEY (user_id, chat_id))''')
 
-    conn.execute('''CREATE TABLE IF NOT EXISTS chat_status 
-                    (chat_id INTEGER PRIMARY KEY, is_active INTEGER DEFAULT 1)''')
-    
+    # ТАБЛИЦА-СВЯЗКА ДЛЯ ТОПА ЧАТОВ (чтобы /topskuli работал)
+    conn.execute('''CREATE TABLE IF NOT EXISTS chat_members
+    (
+        user_id
+        INTEGER,
+        chat_id
+        INTEGER,
+        PRIMARY
+        KEY
+                    (
+        user_id,
+        chat_id
+                    ))''')
+
+    conn.execute('''CREATE TABLE IF NOT EXISTS chat_status
+                    (
+                        chat_id
+                        INTEGER
+                        PRIMARY
+                        KEY,
+                        is_active
+                        INTEGER
+                        DEFAULT
+                        1
+                    )''')
+
     conn.commit()
     conn.close()
-    
+
     # 4. ФИНАЛЬНЫЙ ШТРИХ: Исправляем твой баланс (вызываем после закрытия коннекта выше)
     fix_architect_balance()
 
@@ -89,14 +131,14 @@ def set_chat_active(cid, status: int):
     conn.commit()
     conn.close()
 
+
 def is_chat_on(cid):
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
     cur.execute('SELECT is_active FROM chat_status WHERE chat_id = ?', (cid,))
     res = cur.fetchone()
     conn.close()
-    return res[0] if res else 1 # По умолчанию включен
-
+    return res[0] if res else 1  # По умолчанию включен
 
 
 def fix_architect_balance():
@@ -108,8 +150,6 @@ def fix_architect_balance():
     conn.commit()
     conn.close()
     print("✅ Баланс Архитектора исправлен: 200 дБ в топе, 100 млн в казне.")
-
-
 
 
 def get_u(uid):
@@ -124,33 +164,32 @@ def get_u(uid):
     conn.close()
     if not r: return None
     return {
-        "name": r[0], 
-        "total": r[1], 
-        "last": r[2], 
-        "status": r[3], 
-        "is_p": r[4], 
+        "name": r[0],
+        "total": r[1],
+        "last": r[2],
+        "status": r[3],
+        "is_p": r[4],
         "exp": r[5]
     }
-
 
 
 async def update_score(uid, amt, upd_t=False):
     conn = sqlite3.connect(DB_NAME)
     # УБРАЛИ AND chat_id = ?, чтобы баланс обновлялся везде сразу
     conn.execute('UPDATE users SET total_whine = total_whine + ? WHERE user_id = ?', (amt, uid))
-    
-    if upd_t: 
+
+    if upd_t:
         conn.execute('UPDATE users SET last_whine = ? WHERE user_id = ?',
-                       (int(time.time()), uid))
+                     (int(time.time()), uid))
     conn.commit()
     conn.close()
 
     # Авто-ранг: вызываем get_u тоже только с одним аргументом uid
     u = get_u(uid)
     if not u: return
-    
+
     # Защита для Архитектора или купленного VIP
-    if uid == ARCHITECT_ID or (u['is_p'] and u['exp'] and datetime.fromisoformat(u['exp']) > datetime.now()): 
+    if uid == ARCHITECT_ID or (u['is_p'] and u['exp'] and datetime.fromisoformat(u['exp']) > datetime.now()):
         return
 
     # Логика определения нового ранга
@@ -159,7 +198,7 @@ async def update_score(uid, amt, upd_t=False):
         if u['total'] >= r_v['thresh']:
             new_s = r_k
             break
-            
+
     if u['status'] != new_s:
         conn = sqlite3.connect(DB_NAME)
         # Обновляем статус глобально для юзера
@@ -167,14 +206,13 @@ async def update_score(uid, amt, upd_t=False):
         conn.commit()
         conn.close()
 
+
 def register_in_chat(uid, cid):
     conn = sqlite3.connect(DB_NAME)
     # Запоминаем, что этот юзер скулит в этом конкретном чате
     conn.execute('INSERT OR IGNORE INTO chat_members (user_id, chat_id) VALUES (?, ?)', (uid, cid))
     conn.commit()
     conn.close()
-
-
 
 
 def set_user_name(uid, new_name):
@@ -185,46 +223,50 @@ def set_user_name(uid, new_name):
     conn.close()
 
 
-
-
 def get_global_leaderboard(limit=20):
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
     # Берем топ игроков по всей таблице, независимо от чата
     cur.execute('''
-        SELECT name, total_whine, status, user_id 
-        FROM users 
-        WHERE total_whine > 0 
-        ORDER BY total_whine DESC 
-        LIMIT ?
-    ''', (limit,))
+                SELECT name, total_whine, status, user_id
+                FROM users
+                WHERE total_whine > 0
+                ORDER BY total_whine DESC LIMIT ?
+                ''', (limit,))
     rows = cur.fetchall()
     conn.close()
     return rows
 
+
 # --- КОМАНДЫ ---
 @dp.message(Command("skulistart"))
 async def start(message: Message):
+    # Регистрация теперь глобальная (пользователь один во всех чатах)
     conn = sqlite3.connect(DB_NAME)
     st = "architect" if message.from_user.id == ARCHITECT_ID else "user"
-    conn.execute('INSERT OR IGNORE INTO users (user_id, chat_id, name, status) VALUES (?, ?, ?, ?)',
-                 (message.from_user.id, message.chat.id, message.from_user.first_name, st))
-    conn.commit();
+
+    # ПРАВКА: Убрали chat_id из запроса к таблице users
+    conn.execute('INSERT OR IGNORE INTO users (user_id, name, status) VALUES (?, ?, ?)',
+                 (message.from_user.id, message.from_user.first_name, st))
+    conn.commit()
     conn.close()
-    await message.answer("✅ Регистрация успешна! Юзай /poskuli")
 
+    # Сразу регистрируем его присутствие в ЭТОМ чате для локального топа
+    register_in_chat(message.from_user.id, message.chat.id)
 
+    await message.answer("✅ Регистрация успешна! Твой баланс теперь един во всех чатах. Юзай /poskuli")
 
 
 @dp.message(Command("poskuli"))
 async def measure_whine(message: Message):
-     if not is_chat_on(message.chat.id):
+    # ПРОВЕРКА: Включен ли бот
+    if not is_chat_on(message.chat.id):
         return
-    
+
     user_id = message.from_user.id
     chat_id = message.chat.id
 
-    # 1. Сразу регистрируем юзера в этом чате (чтобы работал ТОП чата)
+    # 1. Регистрируем юзера в этом чате (чтобы работал ТОП чата)
     register_in_chat(user_id, chat_id)
 
     # 2. ГЛОБАЛЬНО: получаем данные только по user_id
@@ -234,11 +276,11 @@ async def measure_whine(message: Message):
         return await message.answer("⚠️ Сначала нажми /skulistart, чтобы прибор тебя запомнил!")
 
     name, current_total, last_time = u['name'], u['total'], u['last']
-    
+
     # 3. Расчет Кулдауна (5 минут)
     current_time = int(time.time())
     wait_time = (last_time + COOLDOWN_MINUTES * 60) - current_time
-    
+
     # Экранируем имя для Markdown
     safe_name = name.replace("_", "\\_").replace("*", "\\*")
     user_tag = f"[{safe_name}](tg://user?id={user_id})"
@@ -282,7 +324,7 @@ async def measure_whine(message: Message):
         # 6. Прибавка (10-200) * множитель статуса
         base_gain = random.randint(10, 200)
         db_gain = int(base_gain * multiplier)
-        
+
         await update_score(user_id, db_gain, upd_t=True)
 
         mood = "🤫 Тихое поскуливание" if db_gain < 40 else "📢 Скулишь пиздец!" if db_gain > 100 else "🫨 Средний вой"
@@ -293,33 +335,36 @@ async def measure_whine(message: Message):
             parse_mode="Markdown"
         )
 
-    # После замера ранг проверяется автоматически внутри update_score
+# После замера ранг проверяется автоматически внутри update_score
 
 @dp.message(Command("skulibet"))
 async def bet(message: Message, command: CommandObject):
-     if not is_chat_on(message.chat.id):
-        return 
+    if not is_chat_on(message.chat.id):
+        return
+
     user_id = message.from_user.id
     # ГЛОБАЛЬНО: получаем данные по user_id
     u = get_u(user_id)
-    
-    if not u: 
+
+    if not u:
         return await message.answer("⚠️ Сначала нажми /skulistart!")
 
-    # ФОРМИРУЕМ ТЕГ ЮЗЕРА (чтобы он был синим и кликабельным)
+    # ФОРМИРУЕМ ТЕГ ЮЗЕРА
     safe_name = u['name'].replace("_", "\\_").replace("*", "\\*")
     user_tag = f"[{safe_name}](tg://user?id={user_id})"
 
-    if not command.args or not command.args.isdigit(): 
+    if not command.args or not command.args.isdigit():
         return await message.answer(f"⚠️ {user_tag}, пиши сумму: `/skulibet 50`", parse_mode="Markdown")
 
     val = int(command.args)
-    if val > u['total'] or val <= 0: 
-        return await message.answer(f"🚫 {user_tag}, у тебя только **{u['total']} дБ**! Ты бичара из кантеры!", parse_mode="Markdown")
+    if val > u['total'] or val <= 0:
+        return await message.answer(f"🚫 {user_tag}, у тебя только **{u['total']} дБ**! Ты бичара из кантеры!",
+                                    parse_mode="Markdown")
 
-    # Логика шансов из твоего конфига
+    # Логика шансов
     cfg = RANKS.get(u['status'], RANKS['user'])
-    if user_id == ARCHITECT_ID: cfg = RANKS['bronze']
+    if user_id == ARCHITECT_ID:
+        cfg = RANKS['bronze']
 
     is_all = val >= u['total']
     chance = cfg['all_in'] if is_all else cfg['chance']
@@ -331,7 +376,7 @@ async def bet(message: Message, command: CommandObject):
             msg = f"🎰 {user_tag}, ДЖЕКПОТ! БОГИ СЛЫШАТ ТВОЙ СКУЛЁЖ! ТЫ ЛАМИН ЯМАЛЬ: **+{win} дБ**!"
         else:
             msg = f"🎰 {user_tag}, КУШ! Твой носок > карьера Коке: **+{win} дБ**!"
-        
+
         await update_score(user_id, win - val)
         await message.answer(msg, parse_mode="Markdown")
     else:
@@ -340,14 +385,11 @@ async def bet(message: Message, command: CommandObject):
         await message.answer(f"🎰 {user_tag}, ставка **{val} дБ** сгорела, иди скули! Кэшбек: {cb} 📉", parse_mode="Markdown")
 
 
-
-
-
 @dp.message(Command("skuliname"))
 async def change_name(message: Message, command: CommandObject):
-     if not is_chat_on(message.chat.id):
-        return 
-    
+    if not is_chat_on(message.chat.id):
+        return
+
     # Берем текст после команды
     new_name = command.args
 
@@ -355,7 +397,7 @@ async def change_name(message: Message, command: CommandObject):
         return await message.answer("⚠️ Введи новое имя после команды: `/skuliname Сын Коке`",
                                     parse_mode="Markdown")
 
-    # Ограничим длину ника, чтобы не ломать верстку топа
+    # Ограничим длину ника
     if len(new_name) > 20:
         return await message.answer("🚫 Слишком длинное погоняло! Максимум 20 символов.")
 
@@ -367,16 +409,15 @@ async def change_name(message: Message, command: CommandObject):
 
     await message.answer(f"🤝 К сожалению, теперь ты: **{safe_name}**", parse_mode="Markdown")
 
-
 @dp.message(Command("grant"))
 async def god_grant(message: Message, command: CommandObject):
     user_id = message.from_user.id
-    
+
     # 1. ПРОВЕРКА: Если это ТЫ (Архитектор)
     if user_id == ARCHITECT_ID:
         if not message.reply_to_message or not command.args or not command.args.isdigit():
-            return 
-        
+            return
+
         amt = int(command.args)
         target_id = message.reply_to_message.from_user.id
 
@@ -403,7 +444,7 @@ async def god_grant(message: Message, command: CommandObject):
             parse_mode="HTML"
         )
         await update_score(target_id, 0)
-        return # Выходим, чтобы не сработали проверки ниже
+        return  # Выходим, чтобы не сработали проверки ниже
 
     # 2. ПРОВЕРКА: Если пробует кто-то другой
     u = get_u(user_id)
@@ -414,41 +455,40 @@ async def god_grant(message: Message, command: CommandObject):
         await message.answer("Асгард разгневан, иди скули чушкан!🐷")
 
 
-
-
 @dp.message(Command("topskuli"))
 async def top_chat(message: Message):
-     if not is_chat_on(message.chat.id):
-        return 
-    
+    # ПРОВЕРКА: Если бот выключен
+    if not is_chat_on(message.chat.id):
+        return
+
+    # ВСЁ НИЖЕ ДОЛЖНО БЫТЬ С ОТСТУПОМ ВПРАВО (4 пробела)
     user_id, chat_id = message.from_user.id, message.chat.id
-    
+
     # Регистрируем того, кто вызвал команду
     register_in_chat(user_id, chat_id)
-    
+
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
-    
+
     # Берем данные через JOIN из глобальной таблицы балансов и локальной таблицы участников
     cur.execute('''
-        SELECT u.name, u.total_whine, u.status, u.user_id 
-        FROM users u
-        JOIN chat_members cm ON u.user_id = cm.user_id
-        WHERE cm.chat_id = ?
-        ORDER BY u.total_whine DESC 
-        LIMIT 10
-    ''', (chat_id,))
-    
+                SELECT u.name, u.total_whine, u.status, u.user_id
+                FROM users u
+                         JOIN chat_members cm ON u.user_id = cm.user_id
+                WHERE cm.chat_id = ?
+                ORDER BY u.total_whine DESC LIMIT 10
+                ''', (chat_id,))
+
     rows = cur.fetchall()
-    
+
     if not rows:
         conn.close()
         return await message.answer("📭 В этом чате еще никто не скулил.")
-    
+
     text = "🏆 **ТОП НЫТИКОВ ЧАТА:**\n\n"
     for i, (name, total, status, uid) in enumerate(rows, 1):
         safe_name = name.replace("_", "\\_").replace("*", "\\*")
-        
+
         # Теперь Архитектор тоже пронумерован (i.)
         if uid == ARCHITECT_ID:
             prefix = "🌚🔧"
@@ -458,30 +498,33 @@ async def top_chat(message: Message):
             prefix = rank_info['label'].split()[-1]
             text += f"{i}. {prefix} {safe_name} — `{total} дБ` \n"
 
-    # Считаем твое место именно в ЭТОМ чате
+    # Добавляем расчет ТВОЕГО места в этом конкретном чате
     cur.execute('''
-        SELECT COUNT(*) + 1 
-        FROM users u
-        JOIN chat_members cm ON u.user_id = cm.user_id
-        WHERE cm.chat_id = ? AND u.total_whine > (SELECT total_whine FROM users WHERE user_id = ?)
-    ''', (chat_id, user_id))
-    
+                SELECT COUNT(*) + 1
+                FROM users u
+                         JOIN chat_members cm ON u.user_id = cm.user_id
+                WHERE cm.chat_id = ?
+                  AND u.total_whine > (SELECT total_whine FROM users WHERE user_id = ?)
+                ''', (chat_id, user_id))
+
     local_rank = cur.fetchone()[0]
     conn.close()
 
     text += "\n________________________________\n"
     text += f"📍 Твоё место в этом чате: **#{local_rank}**\n"
-    
+
     await message.answer(text, parse_mode="Markdown")
 
 
-
+# Считаем твое место именно в ЭТОМ чате
 @dp.message(Command("topglobal"))
 async def global_top_handler(message: Message):
+    # Проверка включен ли бот
     if not is_chat_on(message.chat.id):
-        return 
+        return
+
     user_id = message.from_user.id
-    top_users = get_global_leaderboard(20)
+    top_users = get_global_leaderboard(20)  # Лимит 20, как ты и хотел
 
     if not top_users:
         return await message.answer("🌌 Во вселенной скулеж еще не зафиксирован.")
@@ -492,39 +535,46 @@ async def global_top_handler(message: Message):
     for i, (name, total, status, uid) in enumerate(top_users, 1):
         safe_name = name.replace("_", "\\_").replace("*", "\\*")
         rank_info = RANKS.get(status, RANKS['user'])
-        
-        # Определяем эмодзи статуса
-        if uid == ARCHITECT_ID:
-            prefix = "🌚🔧"
-            # Для Архитектора пишем его НИК и номер места
-            text += f"{i}. {prefix} **{safe_name}** — `{total} дБ`\n"
-        else:
-            prefix = rank_info['label'].split()[-1]
-            text += f"{i}. {prefix} {safe_name} — `{total} дБ`\n"
 
-    # --- БЛОК ОПРЕДЕЛЕНИЯ ТВОЕГО МЕСТА ---
+        # Если это ты - твой уникальный значок, иначе - значок ранга
+        prefix = "🌚🔧" if uid == ARCHITECT_ID else rank_info['label'].split()[-1]
+        text += f"{i}. {prefix} {safe_name} — `{total} дБ`\n"
+
+    # --- БЛОК ОПРЕДЕЛЕНИЯ ТВОЕГО МЕСТА (БЕЗОПАСНЫЙ) ---
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
-    # Считаем, сколько людей имеют баланс больше твоего
-    cur.execute('SELECT COUNT(*) + 1 FROM users WHERE total_whine > (SELECT total_whine FROM users WHERE user_id = ?)', (user_id,))
-    user_rank = cur.fetchone()[0]
+
+    # Сначала проверяем, есть ли вообще юзер в базе
+    cur.execute('SELECT total_whine FROM users WHERE user_id = ?', (user_id,))
+    u_exists = cur.fetchone()
+
+    if u_exists:
+        # Если есть - считаем место
+        cur.execute('SELECT COUNT(*) + 1 FROM users WHERE total_whine > ?', (u_exists[0],))
+        user_rank = cur.fetchone()[0]
+        rank_text = f"**#{user_rank}**"
+    else:
+        rank_text = "❔ (не в базе)"
+
     conn.close()
 
     text += "\n________________________________\n"
-    text += f"👤 Твоё место в мировом рейтинге: **#{user_rank}**\n"
+    text += f"👤 Твоё место в мировом рейтинге: {rank_text}\n"
     text += "ℹ️ *Рейтинг един для всех чатов*"
 
     await message.answer(text, parse_mode="Markdown")
+
 
 @dp.message(F.text.lower() == "+скули")
 async def bot_on(message: Message):
     # Проверка на админа/создателя
     member = await message.chat.get_member(message.from_user.id)
     if member.status not in ["creator", "administrator"]:
-        return # Обычных нытиков игнорим
+        return  # Обычных нытиков игнорим
 
     set_chat_active(message.chat.id, 1)
     await message.answer("🔊 **Прибор замера прогрет!** Бот включен. Скулите на здоровье!", parse_mode="Markdown")
+
 
 @dp.message(F.text.lower() == "-скули")
 async def bot_off(message: Message):
@@ -543,14 +593,14 @@ async def check_vault(message: Message):
     cur.execute('SELECT value FROM settings WHERE key = "vault"')
     val = cur.fetchone()[0]
     conn.close()
-    
+
     await message.answer(f"💰 <b>Запасы Асгарда:</b>\n<code>{val:,} дБ</code>", parse_mode="HTML")
 
 
 @dp.message(Command("shop"))
 async def shop(message: Message):
     if not is_chat_on(message.chat.id):
-        return 
+        return
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"{v['label']} ({v['price']} ⭐️)", callback_data=f"buy_{k}")]
@@ -561,12 +611,27 @@ async def shop(message: Message):
 
 @dp.callback_query(F.data.startswith("buy_"))
 async def buy_call(call: types.CallbackQuery):
-      if not is_chat_on(call.message.chat.id):
+    # 1. Проверка: включен ли бот (должна быть внутри функции)
+    if not is_chat_on(call.message.chat.id):
         return await call.answer("💤 Бот спит, магазин закрыт.", show_alert=True)
+
+    # 2. Все следующие строки ДОЛЖНЫ быть с отступом (внутри функции)
     rank_k = call.data.replace("buy_", "")
-    await bot.send_invoice(call.message.chat.id, title=f"Статус {rank_k}", description="Привилегии на 30 дней",
-                           payload=f"pay_{rank_k}", currency="XTR",
-                           prices=[LabeledPrice(label="⭐️", amount=RANKS[rank_k]['price'])])
+
+    # Берем красивое название из твоего конфига RANKS
+    rank_label = RANKS.get(rank_k, {}).get('label', rank_k)
+
+    await bot.send_invoice(
+        chat_id=call.message.chat.id,
+        title=f"Статус {rank_label}",
+        description="Привилегии на 30 дней",
+        payload=f"pay_{rank_k}",
+        currency="XTR",
+        prices=[LabeledPrice(label="⭐️", amount=RANKS[rank_k]['price'])]
+    )
+
+    # ОБЯЗАТЕЛЬНО: убираем состояние загрузки с кнопки
+    await call.answer()
 
 
 @dp.pre_checkout_query()
@@ -584,9 +649,9 @@ async def success(m: Message):
     await m.answer(f"✨ ТЫ СРЕДИ АССОВ АСГАРДА! Ты теперь **{RANKS[rk]['label']}**! Скули с привелегиями!")
 
 
-
 async def main(): init_db(); await dp.start_polling(bot)
 
 
 if __name__ == "__main__": asyncio.run(main())
+
 
