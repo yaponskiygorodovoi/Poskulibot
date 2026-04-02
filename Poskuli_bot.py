@@ -40,7 +40,7 @@ RANKS = {
 def init_db():
     conn = sqlite3.connect(DB_NAME)
 
-    # 1. Создаем временную таблицу с ПРАВИЛЬНЫМ ключом и полями для дуэлей
+    # 1. Создаем временную таблицу с глобальным ключом и дуэльной статой
     conn.execute('''CREATE TABLE IF NOT EXISTS users_new (
         user_id INTEGER PRIMARY KEY,
         name TEXT,
@@ -53,7 +53,7 @@ def init_db():
         duel_losses INTEGER DEFAULT 0
     )''')
 
-    # 2. Миграция данных (только если старая таблица существует)
+    # 2. Миграция данных (если старая таблица существует)
     try:
         cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
         if cursor.fetchone():
@@ -64,35 +64,40 @@ def init_db():
                 GROUP BY user_id
             ''')
             conn.execute("DROP TABLE users")
-            print("✅ Данные успешно мигрировали в новую структуру!")
+            print("✅ Данные мигрировали!")
         
         conn.execute("ALTER TABLE users_new RENAME TO users")
     except sqlite3.OperationalError:
-        pass  # Таблица уже переименована или создана
+        pass 
 
-    # 3. Настройки Казны, Чат-мемберов и Статуса чата
+    # 3. Создание остальных таблиц (Исправлены отступы!)
     conn.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value INTEGER)')
     conn.execute('INSERT OR IGNORE INTO settings VALUES ("vault", 100000000)')
     
     conn.execute('''CREATE TABLE IF NOT EXISTS chat_members (
-        user_id INTEGER,
-        chat_id INTEGER,
-        PRIMARY KEY (user_id, chat_id))''')
+        user_id INTEGER, chat_id INTEGER, PRIMARY KEY (user_id, chat_id))''')
 
     conn.execute('''CREATE TABLE IF NOT EXISTS chat_status (
-        chat_id INTEGER PRIMARY KEY,
-        is_active INTEGER DEFAULT 1)''')
+        chat_id INTEGER PRIMARY KEY, is_active INTEGER DEFAULT 1)''')
 
-    # На всякий случай добавляем колонки дуэлей, если миграция не сработала
-    try: conn.execute("ALTER TABLE users ADD COLUMN duel_wins INTEGER DEFAULT 0")
+    # ИСПРАВЛЕНИЕ: Лечим базу от NULL, чтобы стата дуэлей начала считаться (+1)
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN duel_wins INTEGER DEFAULT 0")
     except: pass
-    try: conn.execute("ALTER TABLE users ADD COLUMN duel_losses INTEGER DEFAULT 0")
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN duel_losses INTEGER DEFAULT 0")
     except: pass
+    
+    try:
+        conn.execute("UPDATE users SET duel_wins = 0 WHERE duel_wins IS NULL")
+        conn.execute("UPDATE users SET duel_losses = 0 WHERE duel_losses IS NULL")
+    except:
+        pass
 
     conn.commit()
     conn.close()
 
-    # 4. ФИНАЛЬНЫЙ ШТРИХ
+    # 4. ФИНАЛЬНЫЙ ШТРИХ: Твой баланс и казна
     fix_architect_balance()
 
 # Функции управления
