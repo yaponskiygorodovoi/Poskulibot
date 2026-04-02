@@ -386,18 +386,59 @@ async def god_grant(message: Message, command: CommandObject):
 
 @dp.message(Command("topskuli"))
 async def top_chat(message: Message):
+    user_id, chat_id = message.from_user.id, message.chat.id
+    
+    # Регистрируем того, кто вызвал команду
+    register_in_chat(user_id, chat_id)
+    
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
-    cur.execute(
-        'SELECT name, total_whine, status, user_id FROM users WHERE chat_id = ? ORDER BY total_whine DESC LIMIT 10',
-        (message.chat.id,))
-    rows = cur.fetchall();
+    
+    # Берем данные через JOIN из глобальной таблицы балансов и локальной таблицы участников
+    cur.execute('''
+        SELECT u.name, u.total_whine, u.status, u.user_id 
+        FROM users u
+        JOIN chat_members cm ON u.user_id = cm.user_id
+        WHERE cm.chat_id = ?
+        ORDER BY u.total_whine DESC 
+        LIMIT 10
+    ''', (chat_id,))
+    
+    rows = cur.fetchall()
+    
+    if not rows:
+        conn.close()
+        return await message.answer("📭 В этом чате еще никто не скулил.")
+    
+    text = "🏆 **ТОП НЫТИКОВ ЧАТА:**\n\n"
+    for i, (name, total, status, uid) in enumerate(rows, 1):
+        safe_name = name.replace("_", "\\_").replace("*", "\\*")
+        
+        # Теперь Архитектор тоже пронумерован (i.)
+        if uid == ARCHITECT_ID:
+            prefix = "🌚🔧"
+            text += f"{i}. {prefix} **{safe_name}** — `{total} дБ` \n"
+        else:
+            rank_info = RANKS.get(status, RANKS['user'])
+            prefix = rank_info['label'].split()[-1]
+            text += f"{i}. {prefix} {safe_name} — `{total} дБ` \n"
+
+    # Считаем твое место именно в ЭТОМ чате
+    cur.execute('''
+        SELECT COUNT(*) + 1 
+        FROM users u
+        JOIN chat_members cm ON u.user_id = cm.user_id
+        WHERE cm.chat_id = ? AND u.total_whine > (SELECT total_whine FROM users WHERE user_id = ?)
+    ''', (chat_id, user_id))
+    
+    local_rank = cur.fetchone()[0]
     conn.close()
-    res = "🏆 **ТОП НЫТИКОВ ЧАТА:**\n\n"
-    for i, (n, t, s, uid) in enumerate(rows, 1):
-        pref = "🌚🔧" if uid == ARCHITECT_ID else RANKS.get(s, RANKS['user'])['label'].split()[-1]
-        res += f"{i}. {pref} {n} — `{t} дБ` \n"
-    await message.answer(res, parse_mode="Markdown")
+
+    text += "\n________________________________\n"
+    text += f"📍 Твоё место в этом чате: **#{local_rank}**\n"
+    
+    await message.answer(text, parse_mode="Markdown")
+
 
 
 @dp.message(Command("topglobal"))
