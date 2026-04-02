@@ -71,12 +71,33 @@ def init_db():
         user_id INTEGER, 
         chat_id INTEGER, 
         PRIMARY KEY (user_id, chat_id))''')
+
+    conn.execute('''CREATE TABLE IF NOT EXISTS chat_status 
+                    (chat_id INTEGER PRIMARY KEY, is_active INTEGER DEFAULT 1)''')
     
     conn.commit()
     conn.close()
     
     # 4. ФИНАЛЬНЫЙ ШТРИХ: Исправляем твой баланс (вызываем после закрытия коннекта выше)
     fix_architect_balance()
+
+
+# Функции управления
+def set_chat_active(cid, status: int):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute('INSERT OR REPLACE INTO chat_status (chat_id, is_active) VALUES (?, ?)', (cid, status))
+    conn.commit()
+    conn.close()
+
+def is_chat_on(cid):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute('SELECT is_active FROM chat_status WHERE chat_id = ?', (cid,))
+    res = cur.fetchone()
+    conn.close()
+    return res[0] if res else 1 # По умолчанию включен
+
+
 
 def fix_architect_balance():
     conn = sqlite3.connect(DB_NAME)
@@ -197,6 +218,9 @@ async def start(message: Message):
 
 @dp.message(Command("poskuli"))
 async def measure_whine(message: Message):
+     if not is_chat_on(message.chat.id):
+        return
+    
     user_id = message.from_user.id
     chat_id = message.chat.id
 
@@ -273,6 +297,8 @@ async def measure_whine(message: Message):
 
 @dp.message(Command("skulibet"))
 async def bet(message: Message, command: CommandObject):
+     if not is_chat_on(message.chat.id):
+        return 
     user_id = message.from_user.id
     # ГЛОБАЛЬНО: получаем данные по user_id
     u = get_u(user_id)
@@ -319,6 +345,9 @@ async def bet(message: Message, command: CommandObject):
 
 @dp.message(Command("skuliname"))
 async def change_name(message: Message, command: CommandObject):
+     if not is_chat_on(message.chat.id):
+        return 
+    
     # Берем текст после команды
     new_name = command.args
 
@@ -389,6 +418,9 @@ async def god_grant(message: Message, command: CommandObject):
 
 @dp.message(Command("topskuli"))
 async def top_chat(message: Message):
+     if not is_chat_on(message.chat.id):
+        return 
+    
     user_id, chat_id = message.from_user.id, message.chat.id
     
     # Регистрируем того, кто вызвал команду
@@ -446,6 +478,8 @@ async def top_chat(message: Message):
 
 @dp.message(Command("topglobal"))
 async def global_top_handler(message: Message):
+    if not is_chat_on(message.chat.id):
+        return 
     user_id = message.from_user.id
     top_users = get_global_leaderboard(20)
 
@@ -482,6 +516,26 @@ async def global_top_handler(message: Message):
 
     await message.answer(text, parse_mode="Markdown")
 
+@dp.message(F.text.lower() == "+скули")
+async def bot_on(message: Message):
+    # Проверка на админа/создателя
+    member = await message.chat.get_member(message.from_user.id)
+    if member.status not in ["creator", "administrator"]:
+        return # Обычных нытиков игнорим
+
+    set_chat_active(message.chat.id, 1)
+    await message.answer("🔊 **Прибор замера прогрет!** Бот включен. Скулите на здоровье!", parse_mode="Markdown")
+
+@dp.message(F.text.lower() == "-скули")
+async def bot_off(message: Message):
+    member = await message.chat.get_member(message.from_user.id)
+    if member.status not in ["creator", "administrator"]:
+        return
+
+    set_chat_active(message.chat.id, 0)
+    await message.answer("💤 **Бот ушел в спячку.** Скулёж в этом чате больше не фиксируется.", parse_mode="Markdown")
+
+
 @dp.message(Command("vault"), F.from_user.id == ARCHITECT_ID)
 async def check_vault(message: Message):
     conn = sqlite3.connect(DB_NAME)
@@ -495,6 +549,9 @@ async def check_vault(message: Message):
 
 @dp.message(Command("shop"))
 async def shop(message: Message):
+    if not is_chat_on(message.chat.id):
+        return 
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"{v['label']} ({v['price']} ⭐️)", callback_data=f"buy_{k}")]
         for k, v in RANKS.items() if v['price'] > 0
@@ -504,6 +561,8 @@ async def shop(message: Message):
 
 @dp.callback_query(F.data.startswith("buy_"))
 async def buy_call(call: types.CallbackQuery):
+      if not is_chat_on(call.message.chat.id):
+        return await call.answer("💤 Бот спит, магазин закрыт.", show_alert=True)
     rank_k = call.data.replace("buy_", "")
     await bot.send_invoice(call.message.chat.id, title=f"Статус {rank_k}", description="Привилегии на 30 дней",
                            payload=f"pay_{rank_k}", currency="XTR",
