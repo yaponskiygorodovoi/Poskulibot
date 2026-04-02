@@ -577,23 +577,31 @@ async def global_top_handler(message: Message):
 
 @dp.message(F.text.lower() == "+скули")
 async def bot_on(message: Message):
-    # Проверка на админа/создателя
     member = await message.chat.get_member(message.from_user.id)
-    if member.status not in ["creator", "administrator"]:
-        return  # Обычных нытиков игнорим
-
-    set_chat_active(message.chat.id, 1)
-    await message.answer("🔊 **Прибор замера прогрет!** Бот включен. Скулите на здоровье!", parse_mode="Markdown")
-
+    
+    # ПРОВЕРКА: Если это Админ или Создатель
+    if member.status in ["creator", "administrator"]:
+        set_chat_active(message.chat.id, 1)
+        await message.answer("🔊 **Прибор замера прогрет!** Бот включен. Скулите на здоровье!", parse_mode="Markdown")
+    else:
+        # Если пишет обычный смертный
+        t_name = message.from_user.first_name.replace("<", "&lt;").replace(">", "&gt;")
+        t_tag = f'<a href="tg://user?id={message.from_user.id}">{t_name}</a>'
+        await message.answer(f"{t_tag}, админом себя почухал?! Чеши в стойло, чушканидзе! 🐽", parse_mode="HTML")
 
 @dp.message(F.text.lower() == "-скули")
 async def bot_off(message: Message):
     member = await message.chat.get_member(message.from_user.id)
-    if member.status not in ["creator", "administrator"]:
-        return
+    
+    if member.status in ["creator", "administrator"]:
+        set_chat_active(message.chat.id, 0)
+        await message.answer("💤 **Бот ушел в спячку.** Скулёж в этом чате больше не фиксируется.", parse_mode="Markdown")
+    else:
+        # Если пишет обычный смертный
+        t_name = message.from_user.first_name.replace("<", "&lt;").replace(">", "&gt;")
+        t_tag = f'<a href="tg://user?id={message.from_user.id}">{t_name}</a>'
+        await message.answer(f"{t_tag}, админом себя почухал?! Чеши в стойло, чушканидзе! 🐽", parse_mode="HTML")
 
-    set_chat_active(message.chat.id, 0)
-    await message.answer("💤 **Бот ушел в спячку.** Скулёж в этом чате больше не фиксируется.", parse_mode="Markdown")
 
 
 @dp.message(Command("vault"), F.from_user.id == ARCHITECT_ID)
