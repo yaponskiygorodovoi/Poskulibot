@@ -129,17 +129,22 @@ async def start(message: Message):
 
 @dp.message(Command("poskuli"))
 async def measure_whine(message: Message):
-    user_id, chat_id = message.from_user.id, message.chat.id
+    user_id = message.from_user.id
+    # ГЛОБАЛЬНО: получаем данные только по user_id
     u = get_u(user_id)
 
     if not u:
         return await message.answer("⚠️ Сначала нажми /skulistart, чтобы прибор тебя запомнил!")
 
     name, current_total, last_time = u['name'], u['total'], u['last']
-
-    # Расчет Кулдауна
-    wait_time = (last_time + COOLDOWN_MINUTES * 60) - int(time.time())
-    user_tag = f"[{name}](tg://user?id={user_id})"
+    
+    # Расчет Кулдауна (5 минут)
+    current_time = int(time.time())
+    wait_time = (last_time + COOLDOWN_MINUTES * 60) - current_time
+    
+    # Экранируем имя для Markdown
+    safe_name = name.replace("_", "\\_").replace("*", "\\*")
+    user_tag = f"[{safe_name}](tg://user?id={user_id})"
 
     if wait_time > 0:
         minutes, seconds = divmod(wait_time, 60)
@@ -148,10 +153,8 @@ async def measure_whine(message: Message):
             parse_mode="Markdown"
         )
 
-    # Получаем настройки ранга для множителя
+    # Берем конфиг ранга (множитель)
     cfg = RANKS.get(u['status'], RANKS['user'])
-    # У Архитектора множитель как у КМС (1.0), у Ангела 1.5, у Бога 2.0 и т.д.
-    # Если в конфиге нет множителя, по умолчанию 1.0
     multiplier = cfg.get('multiplier', 1.0)
 
     # Шанс штрафа (20%)
@@ -161,39 +164,38 @@ async def measure_whine(message: Message):
             "Поскулил как фанат Атлетико, а фанаты Атлетико скулят мерзко, минус вайб👺👎",
             "Это был не скулёж, а зевок. Учись скулить у первых скулюнов!💩☠️👀",
             "Ты начал ныть, но, к сожалению, подавился слюной! Нахуй с пляжа👺",
-            "Паскудный скулеж, как будто ты не поскулить решил а пососать, штраф!🫵🤡"
-            "Ты фанат Реала?🤡 Что за пронзительный скулёж на судей? Не одобрено!🤡"
-            "Хави смеется над тем как ты слабо скулишь! Пробуй снова!👀"
-            "Какая же хуетень,чувак, угараем всей командой разработчиков, больше так не позорься!💩👀"
-            "Как же ты срешь на ляшки,чел🤡"
-            "К сожалению ты обосрался🤡"
-            "Доволен собой? Но это хуйня, к сожалению!🫵🤡"
+            "Паскудный скулеж, как будто ты не поскулить решил а пососать, штраф!🫵🤡",
+            "Ты фанат Реала?🤡 Что за пронзительный скулёж на судей? Не одобрено!🤡",
+            "Хави смеется над тем как ты слабо скулишь! Пробуй снова!👀",
+            "Какая же хуетень,чувак, угараем всей командой разработчиков, больше так не позорься!💩👀",
+            "Как же ты срешь на ляшки,чел🤡",
+            "К сожалению ты обосрался🤡",
+            "Доволен собой? Но это хуйня, к сожалению!🫵🤡",
             "Что это за дрисня?🤡 Иди поплачь!🤡"
-
         ]
         db_loss = random.randint(1, 5)
-        await update_score(user_id, chat_id, -db_loss, upd_t=True)
+        # ВАЖНО: передаем только user_id и amt
+        await update_score(user_id, -db_loss, upd_t=True)
 
         await message.answer(
             f"📉 {user_tag}, **-{db_loss} дБ**!\n❌ {random.choice(fails)}\nИтог: **{current_total - db_loss} дБ**",
             parse_mode="Markdown"
         )
     else:
-        # Базовая прибавка (твои 10-200) * множитель ранга
+        # Прибавка (10-200) * множитель статуса
         base_gain = random.randint(10, 200)
         db_gain = int(base_gain * multiplier)
+        
+        await update_score(user_id, db_gain, upd_t=True)
 
-        await update_score(user_id, chat_id, db_gain, upd_t=True)
-
-        # Твои статусы замера
         mood = "🤫 Тихое поскуливание" if db_gain < 40 else "📢 Скулишь пиздец!" if db_gain > 100 else "🫨 Средний вой"
-
         bonus_text = f" (Бонус ранга x{multiplier})" if multiplier > 1.0 else ""
 
         await message.answer(
             f"📈 {user_tag}, замер: **{db_gain} дБ**{bonus_text}\nℹ️ Статус: {mood}\nВсего накоплено: **{current_total + db_gain} дБ**",
             parse_mode="Markdown"
         )
+
 
     # После замера ранг проверяется автоматически внутри update_score
 
