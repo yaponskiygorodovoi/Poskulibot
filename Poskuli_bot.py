@@ -284,7 +284,7 @@ async def measure_whine(message: Message):
     if wait_time > 0:
         minutes, seconds = divmod(wait_time, 60)
         return await message.answer(
-            f"🚫⛔ {user_tag}, связки не восстановились!\nЖди еще **{minutes}м {seconds}с**",
+            f"🚫⛔ {user_tag}, связки не восстановились!\nОбожди еще **{minutes}м {seconds}с**,маленький",
             parse_mode="Markdown"
         )
 
