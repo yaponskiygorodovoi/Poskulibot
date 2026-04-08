@@ -299,57 +299,62 @@ async def measure_whine(message: Message):
             "Поскулил как фанат Атлетико, а фанаты Атлетико скулят мерзко, минус вайб👺👎",
             "Это был не скулёж, а зевок. Учись скулить у первых скулюнов!💩☠️👀",
             "Ты начал ныть, но, к сожалению, подавился слюной! Нахуй с пляжа👺",
-            "Паскудный скулеж, как будто ты не поскулить решил а пососать, штраф!🫵🤡",
+            "Паскудный скулеж, как будто ты не поскулить решил, а пососать — штраф!🫵🤡",
             "Ты фанат Реала?🤡 Что за пронзительный скулёж на судей? Не одобрено!🤡",
-            "Хави смеется над тем как ты слабо скулишь! Пробуй снова!👀",
-            "Какая же хуетень,чувак, угараем всей командой разработчиков, больше так не позорься!💩👀",
-            "Как же ты срешь на ляшки,чел🤡",
-            "К сожалению ты обосрался🤡",
+            "Хави смеётся над тем, как ты слабо скулишь! Пробуй снова!👀",
+            "Какая же хуетень, чувак, угараем всей командой разработчиков! 💩👀",
+            "Как же ты срёшь на ляшки, чел 🤡",
+            "К сожалению, ты обосрался 🤡",
             "Доволен собой? Но это хуйня, к сожалению!🫵🤡",
             "Что это за дрисня?🤡 Иди поплачь!🤡"
         ]
         db_loss = random.randint(1, 5)
-        # ВАЖНО: передаем только user_id и сумму
         await update_score(user_id, -db_loss, upd_t=True)
 
         await message.answer(
             f"📉 {user_tag}, **-{db_loss} дБ**!\n❌ {random.choice(fails)}\nИтог: **{current_total - db_loss} дБ**",
             parse_mode="Markdown"
         )
+
     else:
-    # 6. Прибавка (10-200) * множитель статуса
-    base_gain = random.randint(10, 200)
-    db_gain = int(base_gain * multiplier)
-    await update_score(user_id, db_gain, upd_t=True)
-    # Варианты реакций по уровням результата
-    if db_gain < 40:
-        mood_options = [
-            "🤫 Тихое поскуливание",
-            "🦴 Тихушник...",
-            "😶 Почти не слышно, это шёпот?!"
-            "🧕 Будешь так своей крале на ушко шептать"
+        # 6. Прибавка (10-200) * множитель статуса
+        base_gain = random.randint(10, 200)
+        db_gain = int(base_gain * multiplier)
+        await update_score(user_id, db_gain, upd_t=True)
+
+        # Варианты реакций по уровням результата
+        if db_gain < 40:
+            mood_options = [
+                "🤫 Тихое поскуливание",
+                "🦴 Тихушник...",
+                "😶 Почти не слышно, это шёпот?!",
+                "🧕 Будешь так своей крале на ушко шептать"
+            ]
+        elif db_gain > 100:
+            mood_options = [
+                "📢 Скулишь пиздец!",
+                "🚨 Уши закладывает! Аккуратнее немного...",
+                "🐺 Воешь что есть силы!"
+            ]
+        else:
+            mood_options = [
+                "🫨 Средний вой",
+                "😐 Умеренный скулёж, ничего особенного",
+                "🕯️ Звучит стабильно, как скучная игра Арсенала",
+                "🐔 Не говно, но и не топ — ты Тоттенхэм!"
+            ]
+
+        mood = random.choice(mood_options)
+        bonus_text = f" (Бонус ранга x{multiplier})" if multiplier > 1.0 else ""
+
+        reply_variants = [
+            f"📈 {user_tag}, замер: **{db_gain} дБ**{bonus_text}\nℹ️ Статус: {mood}\nВсего накоплено: **{current_total + db_gain} дБ**",
+            f"🧭 {user_tag}, твоё новое значение — **{db_gain} дБ**{bonus_text}\n{mood}\n🔊 Текущий итог: **{current_total + db_gain} дБ**",
+            f"🎚️ {user_tag}, измерение показало **{db_gain} дБ**{bonus_text}\n🎧 {mood}\nСуммарно: **{current_total + db_gain} дБ**"
         ]
-    elif db_gain > 100:
-        mood_options = [
-            "📢 Скулишь пиздец!",
-            "🚨 Уши закладывает! Аккуратнее не много...",
-            "🐺 Воешь что есть силы!"
-        ]
-    else:
-        mood_options = [
-            "🫨 Средний вой",
-            "😐 Умеренный скулёж, ничего особенного",
-            "🕯️ Звучит стабильно, нкак скучная игра Арсенала"
-            "🐔 Не говно, но и не топ, ты - Тоттенхэм!"
-        ]
-    mood = random.choice(mood_options)
-    bonus_text = f" (Бонус ранга x{multiplier})" if multiplier > 1.0 else ""
-    reply_variants = [
-        f"📈 {user_tag}, замер: **{db_gain} дБ**{bonus_text}\nℹ️ Статус: {mood}\nВсего накоплено: **{current_total + db_gain} дБ**",
-        f"🧭 {user_tag}, твоё новое значение — **{db_gain} дБ**{bonus_text}\n{mood}\n🔊 Текущий итог: **{current_total + db_gain} дБ**",
-        f"🎚️ {user_tag}, измерение показало **{db_gain} дБ**{bonus_text}\n🎧 {mood}\nСуммарно: **{current_total + db_gain} дБ**"
-    ]
-    await message.answer(random.choice(reply_variants), parse_mode="Markdown")
+
+        await message.answer(random.choice(reply_variants), parse_mode="Markdown")
+
 
 # После замера ранг проверяется автоматически внутри update_score
 
