@@ -317,19 +317,39 @@ async def measure_whine(message: Message):
             parse_mode="Markdown"
         )
     else:
-        # 6. Прибавка (10-200) * множитель статуса
-        base_gain = random.randint(10, 200)
-        db_gain = int(base_gain * multiplier)
-
-        await update_score(user_id, db_gain, upd_t=True)
-
-        mood = "🤫 Тихое поскуливание" if db_gain < 40 else "📢 Скулишь пиздец!" if db_gain > 100 else "🫨 Средний вой"
-        bonus_text = f" (Бонус ранга x{multiplier})" if multiplier > 1.0 else ""
-
-        await message.answer(
-            f"📈 {user_tag}, замер: **{db_gain} дБ**{bonus_text}\nℹ️ Статус: {mood}\nВсего накоплено: **{current_total + db_gain} дБ**",
-            parse_mode="Markdown"
-        )
+    # 6. Прибавка (10-200) * множитель статуса
+    base_gain = random.randint(10, 200)
+    db_gain = int(base_gain * multiplier)
+    await update_score(user_id, db_gain, upd_t=True)
+    # Варианты реакций по уровням результата
+    if db_gain < 40:
+        mood_options = [
+            "🤫 Тихое поскуливание",
+            "🦴 Тихушник...",
+            "😶 Почти не слышно, это шёпот?!"
+            "🧕 Будешь так своей крале на ушко шептать"
+        ]
+    elif db_gain > 100:
+        mood_options = [
+            "📢 Скулишь пиздец!",
+            "🚨 Уши закладывает! Аккуратнее не много...",
+            "🐺 Воешь что есть силы!"
+        ]
+    else:
+        mood_options = [
+            "🫨 Средний вой",
+            "😐 Умеренный скулёж, ничего особенного",
+            "🕯️ Звучит стабильно, нкак скучная игра Арсенала"
+            "🐔 Не говно, но и не топ, ты - Тоттенхэм!"
+        ]
+    mood = random.choice(mood_options)
+    bonus_text = f" (Бонус ранга x{multiplier})" if multiplier > 1.0 else ""
+    reply_variants = [
+        f"📈 {user_tag}, замер: **{db_gain} дБ**{bonus_text}\nℹ️ Статус: {mood}\nВсего накоплено: **{current_total + db_gain} дБ**",
+        f"🧭 {user_tag}, твоё новое значение — **{db_gain} дБ**{bonus_text}\n{mood}\n🔊 Текущий итог: **{current_total + db_gain} дБ**",
+        f"🎚️ {user_tag}, измерение показало **{db_gain} дБ**{bonus_text}\n🎧 {mood}\nСуммарно: **{current_total + db_gain} дБ**"
+    ]
+    await message.answer(random.choice(reply_variants), parse_mode="Markdown")
 
 # После замера ранг проверяется автоматически внутри update_score
 
