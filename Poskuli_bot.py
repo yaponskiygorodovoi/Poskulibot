@@ -332,9 +332,10 @@ async def measure_whine(message: Message):
             ]
         elif db_gain > 100:
             mood_options = [
-                "📢 Скулишь пиздец!",
+                "📢 Скулишь пиздец! Ты Винисиус??",
                 "🚨 Уши закладывает! Аккуратнее немного...",
-                "🐺 Воешь что есть силы!"
+                "🐺 Воешь как Флик после поражения Барсы!"
+                "🦜 Скулёж дичайший! Как от Симеоне после вылета!"
             ]
         else:
             mood_options = [
@@ -396,7 +397,7 @@ async def bet(message: Message, command: CommandObject):
             win = val * 4
             msg = f"🎰 {user_tag}, ДЖЕКПОТ! БОГИ СЛЫШАТ ТВОЙ СКУЛЁЖ! ТЫ ЛАМИН ЯМАЛЬ: **+{win} дБ**!"
         else:
-            msg = f"🎰 {user_tag}, КУШ! Твой носок > карьера Коке: **+{win} дБ**!"
+            msg = f"🎰 {user_tag}, КУШ! Как же ты грабишь бота, Боже: **+{win} дБ**!"
 
         await update_score(user_id, win - val)
         await message.answer(msg, parse_mode="Markdown")
