@@ -17,7 +17,7 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 ARCHITECT_ID = 6421600902  # !!! ПОСТАВЬ СВОЙ ID !!!
-COOLDOWN_MINUTES = 30
+COOLDOWN_MINUTES = 4
 
 # Конфиг уровней
 RANKS = {
