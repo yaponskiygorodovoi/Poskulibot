@@ -2,10 +2,11 @@ import random, sqlite3, asyncio, time, os
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandObject
-from aiogram.types import Message, LabeledPrice, PreCheckoutQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import Message, LabeledPrice, PreCheckoutQuery, InlineKeyboardButton, InlineKeyboardMarkup, \
+    ChatPermissions
 
 # --- НАСТРОЙКИ ---
-active_duels = {} # Храним текущие бои
+active_duels = {}  # Храним текущие бои
 DB_NAME = "/data/whine_bot.db"
 if not os.path.exists("/data"):
     DB_NAME = "whine_bot.db"
@@ -21,17 +22,20 @@ COOLDOWN_MINUTES = 4
 
 # Конфиг уровней
 RANKS = {
-    "omnipotent": {"thresh": 1500000, "price": 1500, "label": "Всемогущий 🌌", "chance": 0.50, "all_in": 0.85,
-                   "cb": 0.25, "multiplier": 2.5},
-    "diamond": {"thresh": 500000, "price": 1000, "label": "Бог 💎", "chance": 0.49, "all_in": 0.83, "cb": 0.20,
+    # Новый топ-ранг. Шансы намеренно ниже: на вершине Асгарда казино уже не кормит халявой.
+    "olympian": {"thresh": 1000000000, "price": 0, "label": "Олимпиец 🏛️", "chance": 0.38, "all_in": 0.65,
+                 "cb": 0.10, "multiplier": 3.0},
+    "omnipotent": {"thresh": 1500000, "price": 1500, "label": "Всемогущий 🌌", "chance": 0.45, "all_in": 0.76,
+                   "cb": 0.18, "multiplier": 2.5},
+    "diamond": {"thresh": 500000, "price": 1000, "label": "Бог 💎", "chance": 0.44, "all_in": 0.75, "cb": 0.15,
                 "multiplier": 2.0},
-    "gold": {"thresh": 100000, "price": 500, "label": "Ангел 👑", "chance": 0.48, "all_in": 0.81, "cb": 0.15,
+    "gold": {"thresh": 100000, "price": 500, "label": "Ангел 👑", "chance": 0.43, "all_in": 0.74, "cb": 0.12,
              "multiplier": 1.5},
-    "silver": {"thresh": 30000, "price": 150, "label": "МС 🌠", "chance": 0.46, "all_in": 0.79, "cb": 0.10,
+    "silver": {"thresh": 30000, "price": 150, "label": "МС 🌠", "chance": 0.42, "all_in": 0.73, "cb": 0.08,
                "multiplier": 1.2},
-    "bronze": {"thresh": 10000, "price": 50, "label": "КМС 🚀", "chance": 0.44, "all_in": 0.77, "cb": 0.05,
+    "bronze": {"thresh": 10000, "price": 50, "label": "КМС 🚀", "chance": 0.41, "all_in": 0.72, "cb": 0.04,
                "multiplier": 1.1},
-    "user": {"thresh": 0, "price": 0, "label": "Новичок 👤", "chance": 0.42, "all_in": 0.75, "cb": 0.00,
+    "user": {"thresh": 0, "price": 0, "label": "Новичок 👤", "chance": 0.40, "all_in": 0.70, "cb": 0.00,
              "multiplier": 1.0}
 }
 
@@ -65,15 +69,15 @@ def init_db():
             ''')
             conn.execute("DROP TABLE users")
             print("✅ Данные мигрировали!")
-        
+
         conn.execute("ALTER TABLE users_new RENAME TO users")
     except sqlite3.OperationalError:
-        pass 
+        pass
 
-    # 3. Создание остальных таблиц (Исправлены отступы!)
+        # 3. Создание остальных таблиц (Исправлены отступы!)
     conn.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value INTEGER)')
-    conn.execute('INSERT OR IGNORE INTO settings VALUES ("vault", 100000000)')
-    
+    conn.execute('INSERT OR IGNORE INTO settings VALUES ("vault", 1000000000)')
+
     conn.execute('''CREATE TABLE IF NOT EXISTS chat_members (
         user_id INTEGER, chat_id INTEGER, PRIMARY KEY (user_id, chat_id))''')
 
@@ -83,11 +87,13 @@ def init_db():
     # ИСПРАВЛЕНИЕ: Лечим базу от NULL, чтобы стата дуэлей начала считаться (+1)
     try:
         conn.execute("ALTER TABLE users ADD COLUMN duel_wins INTEGER DEFAULT 0")
-    except: pass
+    except:
+        pass
     try:
         conn.execute("ALTER TABLE users ADD COLUMN duel_losses INTEGER DEFAULT 0")
-    except: pass
-    
+    except:
+        pass
+
     try:
         conn.execute("UPDATE users SET duel_wins = 0 WHERE duel_wins IS NULL")
         conn.execute("UPDATE users SET duel_losses = 0 WHERE duel_losses IS NULL")
@@ -99,6 +105,7 @@ def init_db():
 
     # 4. ФИНАЛЬНЫЙ ШТРИХ: Твой баланс и казна
     fix_architect_balance()
+
 
 # Функции управления
 def set_chat_active(cid, status: int):
@@ -122,10 +129,10 @@ def fix_architect_balance():
     # Устанавливаем тебе 200 дБ в рейтинге
     conn.execute('UPDATE users SET total_whine = 200, status = "architect" WHERE user_id = ?', (ARCHITECT_ID,))
     # Устанавливаем 100 млн в скрытую казну
-    conn.execute('UPDATE settings SET value = 100000000 WHERE key = "vault"')
+    conn.execute('UPDATE settings SET value = 1000000000 WHERE key = "vault"')
     conn.commit()
     conn.close()
-    print("✅ Баланс Архитектора исправлен: 200 дБ в топе, 100 млн в казне.")
+    print("✅ Баланс Архитектора исправлен: 200 дБ в топе, 1 млрд в казне.")
 
 
 def get_u(uid):
@@ -146,10 +153,9 @@ def get_u(uid):
         "status": r[3],
         "is_p": r[4],
         "exp": r[5],
-        "wins": r[6],   # Новое поле
+        "wins": r[6],  # Новое поле
         "losses": r[7]  # Новое поле
     }
-
 
 
 async def update_score(uid, amt, upd_t=False):
@@ -201,6 +207,7 @@ def set_user_name(uid, new_name):
     conn.commit()
     conn.close()
 
+
 def get_global_leaderboard(limit=20):
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
@@ -216,22 +223,165 @@ def get_global_leaderboard(limit=20):
     return rows
 
 
-
 def get_duel_rank(wins, losses):
     total = wins + losses
     # Пока нет 3 боев, ранг не даем, чтобы не было "Богов" со счетом 1-0
     if total < 3:
         return "Новичок 🐣"
-    
+
     win_rate = (wins / total) * 100
-    
+
     if win_rate >= 80: return "БОГ ДУЭЛЕЙ 🌌⚡️"
     if win_rate >= 75: return "Серийный убийца 💀"
     if win_rate >= 60: return "Стрелок 🔫"
     if win_rate < 50:  return "Салага 🐥"
-    
-    return "Боец 🥊" 
 
+    return "Боец 🥊"
+
+
+def html_escape(text: str) -> str:
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def html_tag(user: types.User) -> str:
+    name = html_escape(user.first_name or user.username or str(user.id))
+    return f'<a href="tg://user?id={user.id}">{name}</a>'
+
+
+def md_escape(text: str) -> str:
+    return str(text).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
+
+
+def parse_plus_args(message: Message, command_name: str) -> str:
+    text = message.text or ""
+    return text[len(command_name):].strip()
+
+
+def parse_positive_int(raw: str):
+    raw = (raw or "").strip().split()[0] if raw and raw.strip() else ""
+    return int(raw) if raw.isdigit() and int(raw) > 0 else None
+
+
+def parse_mute_seconds(raw: str):
+    raw = (raw or "").strip().lower().split()[0] if raw and raw.strip() else ""
+    if not raw:
+        return None
+
+    multipliers = {
+        "с": 1, "сек": 1, "s": 1,
+        "м": 60, "мин": 60, "m": 60,
+        "ч": 3600, "час": 3600, "h": 3600,
+        "д": 86400, "дн": 86400, "d": 86400,
+    }
+
+    digits = ""
+    suffix = ""
+    for ch in raw:
+        if ch.isdigit():
+            digits += ch
+        else:
+            suffix += ch
+
+    if not digits:
+        return None
+
+    amount = int(digits)
+    multiplier = multipliers.get(suffix, 60)  # просто `+мут 10` = 10 минут
+    seconds = amount * multiplier
+    return seconds if seconds > 0 else None
+
+
+def ensure_user(user: types.User, chat_id: int):
+    st = "architect" if user.id == ARCHITECT_ID else "user"
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute(
+        'INSERT OR IGNORE INTO users (user_id, name, status) VALUES (?, ?, ?)',
+        (user.id, user.first_name, st)
+    )
+    conn.commit()
+    conn.close()
+    register_in_chat(user.id, chat_id)
+
+
+def get_vault():
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute('SELECT value FROM settings WHERE key = "vault"')
+    res = cur.fetchone()
+    conn.close()
+    return res[0] if res else 0
+
+
+def change_vault(delta: int):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute('UPDATE settings SET value = value + ? WHERE key = "vault"', (delta,))
+    conn.commit()
+    conn.close()
+
+
+async def is_chat_admin(chat: types.Chat, user_id: int) -> bool:
+    try:
+        member = await chat.get_member(user_id)
+        return member.status in ["creator", "administrator"]
+    except Exception:
+        return False
+
+
+async def can_architect_or_olympian_mute(message: Message, seconds: int):
+    if message.from_user.id == ARCHITECT_ID:
+        return True, "architect"
+
+    u = get_u(message.from_user.id)
+    if u and u.get("status") == "olympian":
+        if seconds > 10 * 60:
+            return False, "🏛️ Олимпиец может мутить максимум на 10 минут."
+        return True, "olympian"
+
+    return False, "🚫 Команда доступна только Архитектору или Олимпийцу."
+
+
+async def play_casino(message: Message, arg_text: str, usage: str):
+    if not is_chat_on(message.chat.id):
+        return
+
+    user_id = message.from_user.id
+    ensure_user(message.from_user, message.chat.id)
+    u = get_u(user_id)
+
+    safe_name = md_escape(u['name'])
+    user_tag = f"[{safe_name}](tg://user?id={user_id})"
+
+    val = parse_positive_int(arg_text)
+    if val is None:
+        return await message.answer(f"⚠️ {user_tag}, пиши сумму: `{usage}`", parse_mode="Markdown")
+
+    if val > u['total'] or val <= 0:
+        return await message.answer(
+            f"🚫 {user_tag}, у тебя только **{u['total']} дБ**! Ты нищееб никчемный, к сожалению!",
+            parse_mode="Markdown")
+
+    cfg = RANKS.get(u['status'], RANKS['user'])
+    if user_id == ARCHITECT_ID:
+        cfg = RANKS['bronze']
+
+    is_all = val >= u['total']
+    chance = cfg['all_in'] if is_all else cfg['chance']
+
+    if random.random() < chance:
+        win = int(val * (1.2 if is_all else 2.0))
+        if not is_all and random.random() > 0.93:  # Джекпот стал реже
+            win = val * 4
+            msg = f"🎰 {user_tag}, ДЖЕКПОТ! БОГИ СЛЫШАТ ТВОЙ СКУЛЁЖ! ТЫ УСМАН ДЕМБЕЛЕ: **+{win} дБ**!"
+        else:
+            msg = f"🎰 {user_tag}, КУШ! Как же ты ебешь!, Боже: **+{win} дБ**!"
+
+        await update_score(user_id, win - val)
+        await message.answer(msg, parse_mode="Markdown")
+    else:
+        cb = int(val * cfg.get('cb', 0))
+        await update_score(user_id, -val + cb)
+        await message.answer(f"🎰 {user_tag}, ставка **{val} дБ** сгорела, иди скули, пёс! Кэшбек: {cb} 📉",
+                             parse_mode="Markdown")
 
 
 # --- КОМАНДЫ ---
@@ -296,17 +446,18 @@ async def measure_whine(message: Message):
     if random.random() < 0.20:
         fails = [
             "Прибор определил это как полная хуета. 🥺 К сожалению, штраф!🫵🤡",
-            "Поскулил как фанат Атлетико, а фанаты Атлетико скулят мерзко, минус вайб👺👎",
+            "Поскулил как уебок минус вайб👺👎",
             "Это был не скулёж, а зевок. Учись скулить у первых скулюнов!💩☠️👀",
-            "Ты начал ныть, но, к сожалению, подавился слюной! Нахуй с пляжа👺",
-            "Паскудный скулеж, как будто ты не поскулить решил, а пососать — штраф!🫵🤡",
+            "Ты начал ныть, но, к сожалению, подавился слюной! Нахуй иди👺",
+            "Паскудный скулеж, как будто ты не поскулить решил, а пососать — штраф дебилу!🫵🤡",
             "Ты фанат Реала?🤡 Что за пронзительный скулёж на судей? Не одобрено!🤡",
             "Хави смеётся над тем, как ты слабо скулишь! Пробуй снова!👀",
             "Какая же хуетень, чувак, угараем всей командой разработчиков! 💩👀",
             "Как же ты срёшь на ляшки, чел 🤡",
             "К сожалению, ты обосрался 🤡",
             "Доволен собой? Но это хуйня, к сожалению!🫵🤡",
-            "Что это за дрисня?🤡 Иди поплачь!🤡"
+            "Что это за дрисня?🤡 Иди поплачь!🤡",
+            "Так скулят только хуесосы! ШТРАФ!🫵🤡"
         ]
         db_loss = random.randint(1, 5)
         await update_score(user_id, -db_loss, upd_t=True)
@@ -335,14 +486,17 @@ async def measure_whine(message: Message):
                 "📢 Скулишь пиздец! Ты Винисиус??",
                 "🚨 Уши закладывает! Аккуратнее немного...",
                 "🐺 Воешь как Флик после поражения Барсы!",
-                "🦜 Скулёж дичайший! Как от Симеоне после вылета!"
+                "🦜 Скулёж дичайший! Как от фанатов Никогдарсенала",
+                "🤡 Заскулил как Чмани! ",
+                "🤡 Ебать! Вой как от некого Зураба!"
             ]
         else:
             mood_options = [
                 "🫨 Средний вой",
                 "😐 Умеренный скулёж, ничего особенного",
                 "🕯️ Звучит стабильно, как скучная игра Арсенала",
-                "🐔 Не говно, но и не топ — ты Тоттенхэм!"
+                "🐔 Не говно, но и не топ — ты Тоттенхэм!",
+
             ]
 
         mood = random.choice(mood_options)
@@ -361,50 +515,171 @@ async def measure_whine(message: Message):
 
 @dp.message(Command("skulibet"))
 async def bet(message: Message, command: CommandObject):
+    await play_casino(message, command.args or "", "/skulibet 50")
+
+
+@dp.message(F.text.regexp(r"^\+казик(\s|$)"))
+async def plus_casino(message: Message):
+    await play_casino(message, parse_plus_args(message, "+казик"), "+казик 50")
+
+
+@dp.message(F.text.lower() == "+поскулить")
+async def plus_measure_whine(message: Message):
+    await measure_whine(message)
+
+
+@dp.message(F.text.regexp(r"^\+перевод(\s|$)"))
+async def transfer_db(message: Message):
     if not is_chat_on(message.chat.id):
         return
 
-    user_id = message.from_user.id
-    # ГЛОБАЛЬНО: получаем данные по user_id
-    u = get_u(user_id)
-
-    if not u:
-        return await message.answer("⚠️ Сначала нажми /skulistart!")
-
-    # ФОРМИРУЕМ ТЕГ ЮЗЕРА
-    safe_name = u['name'].replace("_", "\\_").replace("*", "\\*")
-    user_tag = f"[{safe_name}](tg://user?id={user_id})"
-
-    if not command.args or not command.args.isdigit():
-        return await message.answer(f"⚠️ {user_tag}, пиши сумму: `/skulibet 50`", parse_mode="Markdown")
-
-    val = int(command.args)
-    if val > u['total'] or val <= 0:
-        return await message.answer(f"🚫 {user_tag}, у тебя только **{u['total']} дБ**! Ты бичара из кантеры!",
+    if not message.reply_to_message or not message.reply_to_message.from_user:
+        return await message.answer("⚠️ Перевод делается ответом на сообщение юзера: `+перевод 100`",
                                     parse_mode="Markdown")
 
-    # Логика шансов
-    cfg = RANKS.get(u['status'], RANKS['user'])
-    if user_id == ARCHITECT_ID:
-        cfg = RANKS['bronze']
+    sender = message.from_user
+    target = message.reply_to_message.from_user
 
-    is_all = val >= u['total']
-    chance = cfg['all_in'] if is_all else cfg['chance']
+    if target.is_bot:
+        return await message.answer("🤖 Ботам дБ не переводим, они и так бездушные.")
 
-    if random.random() < chance:
-        win = int(val * (1.2 if is_all else 2.0))
-        if not is_all and random.random() > 0.90:  # Джекпот
-            win = val * 4
-            msg = f"🎰 {user_tag}, ДЖЕКПОТ! БОГИ СЛЫШАТ ТВОЙ СКУЛЁЖ! ТЫ ЛАМИН ЯМАЛЬ: **+{win} дБ**!"
-        else:
-            msg = f"🎰 {user_tag}, КУШ! Как же ты грабишь бота, Боже: **+{win} дБ**!"
+    if sender.id == target.id:
+        return await message.answer("🤡 Сам себе перевод? Это уже финансовая шизофрения Асгарда.")
 
-        await update_score(user_id, win - val)
-        await message.answer(msg, parse_mode="Markdown")
-    else:
-        cb = int(val * cfg.get('cb', 0))
-        await update_score(user_id, -val + cb)
-        await message.answer(f"🎰 {user_tag}, ставка **{val} дБ** сгорела, иди скули! Кэшбек: {cb} 📉", parse_mode="Markdown")
+    amount = parse_positive_int(parse_plus_args(message, "+перевод"))
+    if amount is None:
+        return await message.answer("⚠️ Формат: `+перевод 100` в ответ на сообщение получателя.", parse_mode="Markdown")
+
+    ensure_user(sender, message.chat.id)
+    ensure_user(target, message.chat.id)
+
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute('SELECT total_whine FROM users WHERE user_id = ?', (sender.id,))
+    sender_balance = cur.fetchone()[0]
+
+    if sender_balance < amount:
+        conn.close()
+        return await message.answer(f"🚫 У тебя только <b>{sender_balance} дБ</b>. Не вывез перевод, скули дальше.",
+                                    parse_mode="HTML")
+
+    cur.execute('UPDATE users SET total_whine = total_whine - ? WHERE user_id = ?', (amount, sender.id))
+    cur.execute('UPDATE users SET total_whine = total_whine + ? WHERE user_id = ?', (amount, target.id))
+    conn.commit()
+    conn.close()
+
+    await update_score(sender.id, 0)
+    await update_score(target.id, 0)
+
+    await message.answer(
+        f"💸 {html_tag(target)}, тебе перевод от {html_tag(sender)}!\n"
+        f"<b>{amount} дБ</b> прилетело в карман. Скули на здоровье! 🐺🔊🥂",
+        parse_mode="HTML"
+    )
+
+
+@dp.message(F.text.regexp(r"^\+списать(\s|$)"))
+async def architect_take_db(message: Message):
+    if message.from_user.id != ARCHITECT_ID:
+        return await message.answer("🚫 Казначейский нож только у Архитектора.")
+
+    if not message.reply_to_message or not message.reply_to_message.from_user:
+        return await message.answer("⚠️ Формат: `+списать 100` ответом на сообщение жертвы.", parse_mode="Markdown")
+
+    amount = parse_positive_int(parse_plus_args(message, "+списать"))
+    if amount is None:
+        return await message.answer("⚠️ Формат: `+списать 100`", parse_mode="Markdown")
+
+    target = message.reply_to_message.from_user
+    ensure_user(target, message.chat.id)
+
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute('SELECT total_whine FROM users WHERE user_id = ?', (target.id,))
+    balance = cur.fetchone()[0]
+    take = min(amount, balance)
+    cur.execute('UPDATE users SET total_whine = total_whine - ? WHERE user_id = ?', (take, target.id))
+    cur.execute('UPDATE settings SET value = value + ? WHERE key = "vault"', (take,))
+    conn.commit()
+    conn.close()
+
+    await update_score(target.id, 0)
+
+    await message.answer(
+        f"🧾 <b>Аудит Асгарда</b>\n"
+        f"С {html_tag(target)} списано <b>{take} дБ</b>. Казна довольно урчит. 🏦",
+        parse_mode="HTML"
+    )
+
+
+@dp.message(F.text.regexp(r"^\+мут(\s|$)"))
+async def mute_user(message: Message):
+    if not message.reply_to_message or not message.reply_to_message.from_user:
+        return await message.answer("⚠️ Мут делается ответом на сообщение: `+мут 10м` или `+мут 1ч`",
+                                    parse_mode="Markdown")
+
+    seconds = parse_mute_seconds(parse_plus_args(message, "+мут"))
+    if seconds is None:
+        return await message.answer("⚠️ Формат: `+мут 10м`, `+мут 1ч`, `+мут 2д`. Без суффикса — минуты.",
+                                    parse_mode="Markdown")
+
+    ok, role_or_msg = await can_architect_or_olympian_mute(message, seconds)
+    if not ok:
+        return await message.answer(role_or_msg)
+
+    target = message.reply_to_message.from_user
+    if target.id == message.from_user.id:
+        return await message.answer("🤡 Самомут? Ты ебанат что ли блядь?!")
+
+    if await is_chat_admin(message.chat, target.id):
+        return await message.answer("🛡️ Админов/создателя чата мутить нельзя. Ебанулся что ли долбоеб?!")
+
+    until_date = datetime.now() + timedelta(seconds=seconds)
+    try:
+        await bot.restrict_chat_member(
+            chat_id=message.chat.id,
+            user_id=target.id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=until_date
+        )
+    except Exception as e:
+        return await message.answer(
+            f"⚠️ Не смог замутить. Проверь, что бот админ с правом ограничивать участников. Ошибка: <code>{html_escape(e)}</code>",
+            parse_mode="HTML")
+
+    mins = max(1, seconds // 60)
+    await message.answer(
+        f"🔇 {html_tag(target)} хуесос отправлен под шконарь на <b>{mins} мин.</b>\n"
+        f"Исполнитель: {html_tag(message.from_user)}",
+        parse_mode="HTML"
+    )
+
+
+@dp.message(F.text.lower() == "+бан")
+async def ban_user(message: Message):
+    if message.from_user.id != ARCHITECT_ID:
+        return await message.answer("🚫 Банхаммер хранится только у Архитектора.")
+
+    if not message.reply_to_message or not message.reply_to_message.from_user:
+        return await message.answer("⚠️ Бан делается ответом на сообщение юзера: `+бан`", parse_mode="Markdown")
+
+    target = message.reply_to_message.from_user
+    if target.id == message.from_user.id:
+        return await message.answer("🤡 Самобан — сильно,почти как самодрочь, но нет.")
+
+    if await is_chat_admin(message.chat, target.id):
+        return await message.answer("🛡️ Админов/создателя чата банить нельзя, ты охуел?!")
+
+    try:
+        await bot.ban_chat_member(message.chat.id, target.id)
+    except Exception as e:
+        return await message.answer(f"⚠️ Не смог забанить. Проверь права бота. Ошибка: <code>{html_escape(e)}</code>",
+                                    parse_mode="HTML")
+
+    await message.answer(
+        f"🔨 {html_tag(target)} улетел из чата. Архитектор стукнул по ебалу хуебеса. 🌚",
+        parse_mode="HTML"
+    )
 
 
 @dp.message(Command("skuliname"))
@@ -435,12 +710,12 @@ async def change_name(message: Message, command: CommandObject):
 @dp.message(Command("grant"))
 async def god_grant(message: Message, command: CommandObject):
     user_id = message.from_user.id
-    
+
     # 1. ПРОВЕРКА: Если это ТЫ (Архитектор)
     if user_id == ARCHITECT_ID:
         if not message.reply_to_message or not command.args or not command.args.isdigit():
-            return 
-        
+            return
+
         amt = int(command.args)
         target = message.reply_to_message.from_user
         target_id = target.id
@@ -465,18 +740,18 @@ async def god_grant(message: Message, command: CommandObject):
         conn.close()
 
         register_in_chat(target_id, message.chat.id)
-        
+
         # Сначала удаляем команду, потом шлем ответ
         await message.delete()
-        
+
         # ИСПРАВЛЕНО: Один await и корректный текст
         await message.answer(
-            f"⚡️ <b>Глас Асгарда</b>\n\n"
-            f"{target_tag}, ты скулил так, что тебя услышали в Асгарде! "
-            f"Тебе послали бонус <b>{amt} дБ</b>!",
+            f"⚡️ <b>Глас Олимпа</b>\n\n"
+            f"{target_tag}, ты скулил так, что тебя услышали на Олимпе! "
+            f"Тебе послали бонус и леща <b>{amt} дБ</b>!",
             parse_mode="HTML"
         )
-        
+
         await update_score(target_id, 0)
         return
 
@@ -485,8 +760,7 @@ async def god_grant(message: Message, command: CommandObject):
     if u and u.get('is_p'):
         await message.answer("Прости, премиальный нытик, но для тебя это скрытая функция 🥷")
     else:
-        await message.answer("Асгард разгневан, иди скули чушкан!🐷")
-
+        await message.answer("Олимп разгневан, иди скули чушкан недоебаный!🐷")
 
 
 @dp.message(Command("topskuli"))
@@ -518,10 +792,10 @@ async def top_chat(message: Message):
     text = "🏆 **ТОП НЫТИКОВ ЧАТА:**\n\n"
     for i, (name, total, status, uid, wins, losses) in enumerate(rows, 1):
         safe_name = name.replace("_", "\\_").replace("*", "\\*")
-        
+
         # Считаем дуэльный ранг для каждого
         d_rank = get_duel_rank(wins, losses)
-        
+
         # Определяем префикс ранга по дБ
         if uid == ARCHITECT_ID:
             prefix = "🌚🔧"
@@ -551,7 +825,6 @@ async def top_chat(message: Message):
     await message.answer(text, parse_mode="Markdown")
 
 
-
 # Считаем твое место именно в ЭТОМ чате
 @dp.message(Command("topglobal"))
 async def global_top_handler(message: Message):
@@ -572,13 +845,13 @@ async def global_top_handler(message: Message):
     for i, (name, total, status, uid, wins, losses) in enumerate(top_users, 1):
         safe_name = name.replace("_", "\\_").replace("*", "\\*")
         rank_info = RANKS.get(status, RANKS['user'])
-        
+
         # Получаем ранг дуэлянта (Салага, Стрелок, Бог и т.д.)
         d_rank = get_duel_rank(wins, losses)
 
         # Префикс (Архитектор или ранг по дБ)
         prefix = "🌚🔧" if uid == ARCHITECT_ID else rank_info['label'].split()[-1]
-        
+
         # Итоговая строка с балансом и боксерской статой
         text += f"{i}. {prefix} {safe_name} — `{total} дБ` | {d_rank} ({wins}W/{losses}L)\n"
 
@@ -605,11 +878,10 @@ async def global_top_handler(message: Message):
     await message.answer(text, parse_mode="Markdown")
 
 
-
 @dp.message(F.text.lower() == "+скули")
 async def bot_on(message: Message):
     member = await message.chat.get_member(message.from_user.id)
-    
+
     # ПРОВЕРКА: Если это Админ или Создатель
     if member.status in ["creator", "administrator"]:
         set_chat_active(message.chat.id, 1)
@@ -620,19 +892,20 @@ async def bot_on(message: Message):
         t_tag = f'<a href="tg://user?id={message.from_user.id}">{t_name}</a>'
         await message.answer(f"{t_tag}, админом себя почухал?! Чеши в стойло, чушканидзе! 🐽", parse_mode="HTML")
 
+
 @dp.message(F.text.lower() == "-скули")
 async def bot_off(message: Message):
     member = await message.chat.get_member(message.from_user.id)
-    
+
     if member.status in ["creator", "administrator"]:
         set_chat_active(message.chat.id, 0)
-        await message.answer("💤 **Бот ушел в спячку.** Скулёж в этом чате больше не фиксируется.", parse_mode="Markdown")
+        await message.answer("💤 **Бот ушел в спячку.** Скулёж в этом чате больше не фиксируется.",
+                             parse_mode="Markdown")
     else:
         # Если пишет обычный смертный
         t_name = message.from_user.first_name.replace("<", "&lt;").replace(">", "&gt;")
         t_tag = f'<a href="tg://user?id={message.from_user.id}">{t_name}</a>'
         await message.answer(f"{t_tag}, админом себя почухал?! Чеши в стойло, чушканидзе! 🐽", parse_mode="HTML")
-
 
 
 @dp.message(Command("vault"), F.from_user.id == ARCHITECT_ID)
@@ -646,7 +919,6 @@ async def check_vault(message: Message):
     await message.answer(f"💰 <b>Запасы Асгарда:</b>\n<code>{val:,} дБ</code>", parse_mode="HTML")
 
 
-
 @dp.message(F.text.lower() == "+дуэль")
 async def duel_request(message: Message):
     if not is_chat_on(message.chat.id): return
@@ -658,7 +930,8 @@ async def duel_request(message: Message):
 
     u1, u2 = get_u(p1.id), get_u(p2.id)
     if not u1 or not u2: return await message.answer("Оба нытика должны быть в базе (/skulistart)")
-    if u1['total'] <= 0 or u2['total'] <= 0: return await message.answer("У нищих дуэлей не бывает. Наскулите хоть что-то. 💸")
+    if u1['total'] <= 0 or u2['total'] <= 0: return await message.answer(
+        "У нищих дуэлей не бывает. Наскулите хоть что-то. 💸")
 
     duel_id = f"{p1.id}_{p2.id}"
     active_duels[duel_id] = {
@@ -681,6 +954,7 @@ async def duel_request(message: Message):
         reply_markup=kb, parse_mode="HTML"
     )
 
+
 @dp.callback_query(F.data.startswith("d_acc_"))
 async def d_accept(call: types.CallbackQuery):
     d_id = call.data.replace("d_acc_", "")
@@ -690,6 +964,7 @@ async def d_accept(call: types.CallbackQuery):
 
     duel['status'] = "fighting"
     await shoot_round(call.message, d_id)
+
 
 async def shoot_round(msg, d_id):
     duel = active_duels[d_id]
@@ -703,18 +978,20 @@ async def shoot_round(msg, d_id):
         f"<i>Кто же отправится бомжевать первым?...</i>",
         reply_markup=kb, parse_mode="HTML"
     )
+
+
 @dp.callback_query(F.data.startswith("d_shot_"))
 async def d_shoot(call: types.CallbackQuery):
     d_id = call.data.replace("d_shot_", "")
     duel = active_duels.get(d_id)
-    
+
     if not duel or call.from_user.id != duel['turn']:
         return await call.answer("Сейчас не твой ход! ⏳", show_alert=True)
 
-    if random.random() < 0.35: # Шанс попадания
+    if random.random() < 0.35:  # Шанс попадания
         winner_id = duel['turn']
         loser_id = duel['p2_id'] if winner_id == duel['p1_id'] else duel['p1_id']
-        
+
         # Получаем точную сумму проигравшего перед обнулением
         u_loser = get_u(loser_id)
         loser_balance = u_loser['total'] if u_loser else 0
@@ -724,14 +1001,15 @@ async def d_shoot(call: types.CallbackQuery):
         # ОБНОВЛЕНИЕ БАЛАНСА И СТАТИСТИКИ
         conn = sqlite3.connect(DB_NAME)
         # 1. Победителю: прибавляем дБ и +1 к победам
-        conn.execute('UPDATE users SET total_whine = total_whine + ?, duel_wins = duel_wins + 1 WHERE user_id = ?', (loser_balance, winner_id))
+        conn.execute('UPDATE users SET total_whine = total_whine + ?, duel_wins = duel_wins + 1 WHERE user_id = ?',
+                     (loser_balance, winner_id))
         # 2. Проигравшему: обнуляем и +1 к поражениям
         conn.execute('UPDATE users SET total_whine = 0, duel_losses = duel_losses + 1 WHERE user_id = ?', (loser_id,))
         conn.commit()
         conn.close()
-        
+
         winner_name = duel['p1_name'] if winner_id == duel['p1_id'] else duel['p2_name']
-        
+
         # ИСПРАВЛЕНО: Выровнял отступы (было слишком много пробелов)
         await call.message.edit_text(
             f"💀 <b>{random.choice(death_phrases)}</b>\n\n"
@@ -740,14 +1018,14 @@ async def d_shoot(call: types.CallbackQuery):
             f"📉 Проигравший обнулен. Иди скули с нуля! 🐷",
             parse_mode="HTML"
         )
-        
+
         # Обновляем ранги (КМС/МС)
         await update_score(winner_id, 0)
         await update_score(loser_id, 0)
-        
+
         if d_id in active_duels:
             del active_duels[d_id]
-        
+
     else:  # ПРОМАХ
         miss_phrases = [
             "МИМО! Пуля просвистела мимо уха... 💨",
@@ -757,14 +1035,13 @@ async def d_shoot(call: types.CallbackQuery):
             "МАЗИЛА! Иди тренируйся на чушканах! 🐽",
             "ПЕРЕЛЕТ! Ты куда стреляешь, чучело? 👺"
         ]
-        
+
         # Передача хода
         duel['turn'] = duel['p2_id'] if duel['turn'] == duel['p1_id'] else duel['p1_id']
         await shoot_round(call.message, d_id)
-        
+
         # Бот выдает случайную фразу
         await call.answer(random.choice(miss_phrases), show_alert=False)
-
 
 
 @dp.callback_query(F.data.startswith("d_dec_"))
@@ -774,7 +1051,7 @@ async def d_decline(call: types.CallbackQuery):
     if duel and (call.from_user.id == duel['p1_id'] or call.from_user.id == duel['p2_id']):
         await call.message.edit_text("🏳️ Дуэль отменена. Один из нытиков поджал хвост и убежал. 🐕‍🦺")
         del active_duels[d_id]
-       
+
 
 @dp.message(Command("shop"))
 async def shop(message: Message):
@@ -786,42 +1063,47 @@ async def shop(message: Message):
         for k, v in RANKS.items() if v['price'] > 0
     ])
     await message.answer("🏪 **Магазин Скулежа**\nВыбери статус на 30 дней (защита от слива ранга):", reply_markup=kb)
+
+
 @dp.message(Command("info"))
 async def info_handler(message: Message):
     # ПРОВЕРКА: Если бот выключен в этом чате - игнорим (кроме твоей лички)
     if message.chat.type != "private" and not is_chat_on(message.chat.id):
-        return 
+        return
 
     text = (
-        "ℹ️ **ИНФОРМАЦИЯ О БОТЕ ПОСКУЛИ** ℹ️\n"
+        "ℹ️ **ИНФОРМАЦИЯ О ПОСКУЛИБОТЕ** ℹ️\n"
         "________________________________\n\n"
-        
+
         "🎮 **ОСНОВНЫЕ КОМАНДЫ:**\n"
         "• `/skulistart` — Регистрация в системе\n"
-        "• `/poskuli` — Замер скулежа (раз в 5 мин)\n"
-        "• `/skulibet [сумма]` — Казино (шанс x2 или x4)\n"
-        "• `+дуэль` (в ответ юзеру) — Дуэль ва-банк ⚔️\n"
+        "• `/poskuli` или `+поскулить` — Замер скулежа (раз в 5 мин)\n"
+        "• `/skulibet [сумма]` или `+казик [сумма]` — Казино\n"
+        "• `+перевод [сумма]` (ответом юзеру) — Перевести дБ 💸\n"
+        "• `+дуэль` (ответом юзеру) — Дуэль ва-банк ⚔️\n"
         "• `/skuliname [имя]` — Сменить погоняло\n"
         "• `/topskuli` — Топ нытиков чата\n"
         "• `/topglobal` — Мировой рейтинг (W/L)\n"
         "• `/shop` — Магазин статусов ⭐️\n\n"
-        
+
         "📈 **РАНГИ ЗА дБ (Автоматически):**\n"
         "• 10к — КМС 🚀\n"
         "• 30к — МС 🌠\n"
         "• 100к — Ангел 👑\n"
         "• 500к — Бог 💎\n"
         "• 1.5м — Всемогущий 🌌\n"
+        "• 1 млрд — Олимпиец 🏛️ (`+мут` до 10 минут)\n"
         "*(Если дБ упадут ниже порога — статус слетает!)*\n\n"
-        
-        "💎 **ПРИВИЛЕГИИ ПЛАТНЫХ СТАТУСОВ (⭐️):**\n"
-        "1. **Защита:** Статус не слетает при проигрыше в казино/дуэли 30 дней.\n"
-        "2. **Буст:** Множитель замера `/poskuli` до **x2.5**.\n"
-        "3. **Казино:** Повышенный шанс на победу и кэшбек до **25%**.\n"
-        "4. **Власть:** Статус «Всемогущий» может мутить `/mute` на 15 мин.\n\n"
-        
+
+        "💎 **ПРИВИЛЕГИИ:**\n"
+        "1. **Защита платных статусов:** статус не слетает при проигрыше в казино/дуэли 30 дней.\n"
+        "2. **Буст:** множитель замера `/poskuli` до **x3.0** на Олимпийце.\n"
+        "3. **Казино:** шансы подкручены вниз, особенно на высших рангах.\n"
+        "4. **Олимпиец:** может мутить `+мут` максимум на 10 минут, кроме админов.\n"
+        "5. **Архитектор:** `+списать`, `+мут`, `+бан`, `/grant`, `/vault`.\n\n"
+
         "📢 **ОФИЦИАЛЬНЫЙ КАНАЛ:**\n"
-        "Следи за обновами здесь: https://t.me/MoopingERP"
+        "Следи за обновами здесь: https://t.me/MoopingERP\n"
         "________________________________\n"
         "⚙️ *Архитектор слышит твой скулёж...*"
     )
@@ -866,12 +1148,14 @@ async def success(m: Message):
     conn.execute('UPDATE users SET status=?, is_premium=1, vip_expire=? WHERE user_id=?', (rk, exp, m.from_user.id));
     conn.commit();
     conn.close()
-    await m.answer(f"✨ ТЫ СРЕДИ АССОВ АСГАРДА! Ты теперь **{RANKS[rk]['label']}**! Скули с привелегиями!")
+    await m.answer(f"✨ ТЫ СРЕДИ БОГОВ ОЛИМПА! Ты теперь **{RANKS[rk]['label']}**! Скули с привелегиями!")
 
 
 async def main(): init_db(); await dp.start_polling(bot)
 
 
-if __name__ == "__main__": asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
+
 
 
