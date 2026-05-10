@@ -654,6 +654,69 @@ async def mute_user(message: Message):
         parse_mode="HTML"
     )
 
+@dp.message(F.text.lower() == "-мут")
+async def unmute_user(message: Message):
+    if not message.reply_to_message:
+        return await message.answer("⚠️ Ответь командой `-мут` на сообщение юзера.", parse_mode="Markdown")
+
+    moderator = message.from_user
+    target = message.reply_to_message.from_user
+
+    # Нельзя размутить себя
+    if moderator.id == target.id:
+        return await message.answer("🤡 Сам себя размутить решил? Ебантяй нахуй!")
+
+    # Проверяем ранги
+    mod_user = get_u(moderator.id)
+
+    if not mod_user:
+        return await message.answer("⚠️ Ты не зарегистрирован. /skulistart")
+
+    is_architect = moderator.id == ARCHITECT_ID
+    is_olymp = mod_user['status'] == 'olymp'
+
+    if not is_architect and not is_olymp:
+        return await message.answer("🚫 Ты куда полез,скотина припизднутая?!")
+
+    # Проверяем цель
+    target_member = await message.chat.get_member(target.id)
+
+    # Олимпиец не может трогать админов
+    if not is_architect and target_member.status in ["administrator", "creator"]:
+        return await message.answer("⚡️ Олимпийцы не могут размутить админов.")
+
+    try:
+        await bot.restrict_chat_member(
+            chat_id=message.chat.id,
+            user_id=target.id,
+            permissions=types.ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True,
+                can_send_polls=True,
+                can_invite_users=True
+            )
+        )
+
+        t_name = target.first_name.replace("<", "&lt;").replace(">", "&gt;")
+        t_tag = f'<a href="tg://user?id={target.id}">{t_name}</a>'
+
+        m_name = moderator.first_name.replace("<", "&lt;").replace(">", "&gt;")
+        m_tag = f'<a href="tg://user?id={moderator.id}">{m_name}</a>'
+
+        await message.answer(
+            f"🔓 {t_tag} Вышел из под шконки!\n"
+            f"⚖️ Амнистия от пахана {m_tag}",
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        await message.answer(
+            f"❌ Не удалось размутить.\n"
+            f"Причина: `{str(e)}`",
+            parse_mode="Markdown"
+        )
 
 @dp.message(F.text.lower() == "+бан")
 async def ban_user(message: Message):
