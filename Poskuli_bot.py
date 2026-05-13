@@ -457,7 +457,8 @@ async def measure_whine(message: Message):
             "К сожалению, ты обосрался 🤡",
             "Доволен собой? Но это хуйня, к сожалению!🫵🤡",
             "Что это за дрисня?🤡 Иди поплачь!🤡",
-            "Так скулят только хуесосы! ШТРАФ!🫵🤡"
+            "Так скулят только хуесосы! ШТРАФ!🫵🤡",
+            "ПОСКУЛИ БЛЯДОТА 🫵🤡 ШТРАФ! 🫵🤡"
         ]
         db_loss = random.randint(1, 5)
         await update_score(user_id, -db_loss, upd_t=True)
@@ -541,10 +542,10 @@ async def transfer_db(message: Message):
     target = message.reply_to_message.from_user
 
     if target.is_bot:
-        return await message.answer("🤖 Ботам дБ не переводим, они и так бездушные.")
+        return await message.answer("🤖 Ботам дБ не переводи дебил сука ебаный.")
 
     if sender.id == target.id:
-        return await message.answer("🤡 Сам себе перевод? Это уже финансовая шизофрения Асгарда.")
+        return await message.answer("🤡 Сам себе перевод? Ты внатуре пизданутая скотина")
 
     amount = parse_positive_int(parse_plus_args(message, "+перевод"))
     if amount is None:
@@ -795,7 +796,7 @@ async def god_grant(message: Message, command: CommandObject):
 
         if vault_val < amt:
             conn.close()
-            return await message.answer("🏦 Казна Асгарда пуста!")
+            return await message.answer("🏦 Казна Олимпа пуста! Бартомеу блядь!")
 
         conn.execute('UPDATE settings SET value = value - ? WHERE key = "vault"', (amt,))
         conn.execute('UPDATE users SET total_whine = total_whine + ? WHERE user_id = ?', (amt, target_id))
@@ -1165,9 +1166,7 @@ async def info_handler(message: Message):
         "4. **Олимпиец:** может мутить `+мут` максимум на 10 минут, кроме админов.\n"
         "5. **Архитектор:** `+списать`, `+мут`, `+бан`, `/grant`, `/vault`.\n\n"
 
-        "📢 **ОФИЦИАЛЬНЫЙ КАНАЛ:**\n"
-        "Следи за обновами здесь: https://t.me/MoopingERP\n"
-        "________________________________\n"
+      
         "⚙️ *Архитектор слышит твой скулёж...*"
     )
 
