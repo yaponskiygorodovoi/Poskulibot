@@ -1099,9 +1099,9 @@ async def update_score(
 async def set_user_name(
     user_id: int,
     new_name: str,
-) -> bool:
+) -> str | None:
 
-    result = await get_pool().execute(
+    return await get_pool().fetchval(
         """
         UPDATE users
 
@@ -1110,12 +1110,12 @@ async def set_user_name(
             name_is_custom = TRUE
 
         WHERE user_id = $1
+
+        RETURNING name
         """,
         user_id,
         new_name,
     )
-
-    return result == "UPDATE 1"
 
 
 async def reset_user_name(
@@ -2836,20 +2836,30 @@ async def change_name(
         "reset",
         "сброс",
     }:
-
-        await reset_user_name(
+        reset_ok = await reset_user_name(
             message.from_user.id
         )
+
+        if not reset_ok:
+            await message.answer(
+                "⚠️ Не удалось сбросить имя."
+            )
+            return
 
         current = await get_u(
             message.from_user.id
         )
 
+        if current is None:
+            await message.answer(
+                "⚠️ Не удалось прочитать профиль после сброса имени."
+            )
+            return
+
         await message.answer(
             "♻️ Вернул имя из Telegram: "
             f"<b>{escape(current['name'])}</b>"
         )
-
         return
 
     if len(new_name) > 20:
@@ -2859,14 +2869,32 @@ async def change_name(
         )
         return
 
-    await set_user_name(
+    saved_name = await set_user_name(
         message.from_user.id,
         new_name,
     )
 
+    if saved_name is None:
+        await message.answer(
+            "⚠️ Не удалось сохранить новое имя."
+        )
+        return
+
+    # Дополнительно перечитываем профиль из БД,
+    # чтобы убедиться, что сохранилось именно нужное имя.
+    current = await get_u(
+        message.from_user.id
+    )
+
+    if current is None:
+        await message.answer(
+            "⚠️ Имя записалось, но профиль не удалось перечитать."
+        )
+        return
+
     await message.answer(
         "🤝 К сожалению, теперь ты: "
-        f"<b>{escape(new_name)}</b>"
+        f"<b>{escape(current['name'])}</b>"
     )
 
 
