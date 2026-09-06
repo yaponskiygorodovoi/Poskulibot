@@ -805,16 +805,10 @@ async def _ensure_user(
             telegram_name = EXCLUDED.telegram_name,
 
             name = CASE
-
-                WHEN users.user_id = $4
-                    THEN 'Архитектор'
-
-                WHEN users.name_is_custom
-                    THEN users.name
-
-                ELSE EXCLUDED.telegram_name
-
-            END,
+        WHEN users.name_is_custom
+           THEN users.name
+        ELSE EXCLUDED.telegram_name
+        END,
 
             status = CASE
 
