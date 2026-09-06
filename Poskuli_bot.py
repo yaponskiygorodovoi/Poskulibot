@@ -627,32 +627,30 @@ async def init_db() -> None:
             # ------------------------------------------------
 
             await conn.execute(
-                """
-                INSERT INTO users (
-                    user_id,
-                    name,
-                    telegram_name,
-                    name_is_custom,
-                    total_whine,
-                    status
-                )
-                VALUES (
-                    $1,
-                    'Архитектор',
-                    'Архитектор',
-                    TRUE,
-                    200,
-                    'architect'
-                )
+    """
+    INSERT INTO users (
+        user_id,
+        name,
+        telegram_name,
+        name_is_custom,
+        total_whine,
+        status
+    )
+    VALUES (
+        $1,
+        'Архитектор',
+        'Архитектор',
+        FALSE,
+        200,
+        'architect'
+    )
 
-                ON CONFLICT (user_id)
-                DO UPDATE SET
-                    status = 'architect',
-                    name = 'Архитектор',
-                    name_is_custom = TRUE
-                """,
-                ARCHITECT_ID,
-            )
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+        status = 'architect'
+    """,
+    ARCHITECT_ID,
+)
 
 
 # ============================================================
