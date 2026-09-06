@@ -2878,6 +2878,90 @@ async def ban_user(
         f"{html_tag(moderator)}"
     )
 
+# ============================================================
+# PIN MESSAGE
+# ============================================================
+
+@dp.message(
+    F.text.regexp(
+        r"(?i)^\+(закреп|закрепить)(?:\s|$)"
+    )
+)
+async def pin_message(
+    message: Message,
+) -> None:
+
+    if message.from_user is None:
+        return
+
+    if not is_group(message):
+        await message.answer(
+            "⚠️ Закреплять сообщения можно только "
+            "в группе или супергруппе."
+        )
+        return
+
+    moderator = message.from_user
+
+    # Архитектор имеет право независимо от Telegram-роли.
+    is_architect = (
+        moderator.id == ARCHITECT_ID
+    )
+
+    # Обычная администрация Telegram-чата.
+    is_admin = await is_chat_admin(
+        message.chat.id,
+        moderator.id,
+    )
+
+    if not is_architect and not is_admin:
+        await message.answer(
+            "🚫 Закреплять сообщения могут только "
+            "Архитектор или администрация чата."
+        )
+        return
+
+    if (
+        not message.reply_to_message
+    ):
+        await message.answer(
+            "⚠️ Ответь командой "
+            "<code>+закреп</code> "
+            "или <code>+закрепить</code> "
+            "на сообщение, которое нужно закрепить."
+        )
+        return
+
+    target_message = (
+        message.reply_to_message
+    )
+
+    try:
+        await bot.pin_chat_message(
+            chat_id=message.chat.id,
+            message_id=target_message.message_id,
+            disable_notification=False,
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "Ошибка закрепления сообщения"
+        )
+
+        await message.answer(
+            "⚠️ Не удалось закрепить сообщение.\n"
+            "Проверь, что бот — администратор "
+            "с правом закреплять сообщения.\n"
+            f"Ошибка: "
+            f"<code>{escape(str(exc))}</code>"
+        )
+        return
+
+    await message.answer(
+        "📌 Сообщение закреплено.\n"
+        f"Исполнитель: {html_tag(moderator)}"
+    )
+
 
 # ============================================================
 # NAME
