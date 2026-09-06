@@ -3741,51 +3741,39 @@ async def show_shoot_round(
             reply_markup=keyboard,
         )
 
-
 # ------------------------------------------------------------
 # DUEL ACCEPT
 # ------------------------------------------------------------
 
 @dp.callback_query(
-    F.data.startswith(
-        "d_acc_"
-    )
+    F.data.startswith("d_acc_")
 )
 async def d_accept(
     call: types.CallbackQuery,
 ) -> None:
 
-    message = await callback_message(
-        call
-    )
+    message = await callback_message(call)
 
-    if (
-        message is None
-        or call.data is None
-    ):
+    if message is None or call.data is None:
         return
 
-    duel_id = call.data.removeprefix(
-        "d_acc_"
-    )
+    duel_id = call.data.removeprefix("d_acc_")
 
-    # КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ:
-    # сразу гасим Telegram spinner.
+    # Сразу гасим Telegram spinner.
     try:
-        await call.answer(
-            "Принимаю вызов…"
-        )
+        await call.answer("Принимаю вызов…")
     except Exception:
         logger.exception(
             "Не удалось ответить callback accept"
         )
 
     try:
-
         async with asyncio.timeout(
             DUEL_CALLBACK_TIMEOUT_SECONDS
         ):
 
+            # Возвращаем зависшую ставку этого пользователя,
+            # если старая дуэль уже истекла.
             await cleanup_expired_duels(
                 [call.from_user.id]
             )
@@ -3796,11 +3784,8 @@ async def d_accept(
                     duel = await conn.fetchrow(
                         """
                         SELECT *
-
                         FROM duels
-
                         WHERE duel_id = $1
-
                         FOR UPDATE
                         """,
                         duel_id,
@@ -3811,11 +3796,8 @@ async def d_accept(
 
                     elif (
                         duel["expires_at"]
-                        <= datetime.now(
-                            timezone.utc
-                        )
+                        <= datetime.now(timezone.utc)
                     ):
-
                         await _refund_expired_duel(
                             conn,
                             duel,
@@ -3836,7 +3818,6 @@ async def d_accept(
                         outcome = "already_fighting"
 
                     else:
-
                         balances = await _lock_users(
                             conn,
                             [
@@ -3846,20 +3827,18 @@ async def d_accept(
                         )
 
                         balance_by_id = {
-                            row["user_id"]:
-                                row["total_whine"]
-
+                            row["user_id"]: row["total_whine"]
                             for row in balances
                         }
 
-                        p1_stake = (
+                        p1_stake = int(
                             balance_by_id.get(
                                 duel["p1_id"],
                                 0,
                             )
                         )
 
-                        p2_stake = (
+                        p2_stake = int(
                             balance_by_id.get(
                                 duel["p2_id"],
                                 0,
@@ -3870,7 +3849,6 @@ async def d_accept(
                             p1_stake <= 0
                             or p2_stake <= 0
                         ):
-
                             await conn.execute(
                                 """
                                 DELETE FROM duels
@@ -3882,13 +3860,20 @@ async def d_accept(
                             outcome = "no_money"
 
                         else:
+                            # Рассчитываем банк в Python.
+                            # Не используем "$2 + $3" внутри SQL,
+                            # потому что asyncpg/PostgreSQL
+                            # воспринимал оба параметра как unknown.
+                            duel_bank = (
+                                p1_stake
+                                + p2_stake
+                            )
 
+                            # Забираем ставки обоих игроков.
                             await conn.execute(
                                 """
                                 UPDATE users
-
                                 SET total_whine = 0
-
                                 WHERE user_id = ANY(
                                     $1::BIGINT[]
                                 )
@@ -3899,29 +3884,24 @@ async def d_accept(
                                 ],
                             )
 
+                            # Фиксируем реальные ставки и банк.
                             duel = await conn.fetchrow(
                                 """
                                 UPDATE duels
-
                                 SET
                                     p1_stake = $2,
                                     p2_stake = $3,
-
-                                    bank = $2 + $3,
-
+                                    bank = $4,
                                     status = 'fighting',
-
                                     round_no = 0,
-
-                                    expires_at = $4
-
+                                    expires_at = $5
                                 WHERE duel_id = $1
-
                                 RETURNING *
                                 """,
                                 duel_id,
                                 p1_stake,
                                 p2_stake,
+                                duel_bank,
                                 (
                                     datetime.now(
                                         timezone.utc
@@ -3945,7 +3925,6 @@ async def d_accept(
                             outcome = "accepted"
 
     except TimeoutError:
-
         logger.warning(
             "Тайм-аут принятия дуэли %s",
             duel_id,
@@ -3959,7 +3938,6 @@ async def d_accept(
         return
 
     except Exception:
-
         logger.exception(
             "Ошибка принятия дуэли %s",
             duel_id,
@@ -3973,24 +3951,18 @@ async def d_accept(
         return
 
     if outcome == "missing":
-
         await message.answer(
-            "⌛ Вызов истёк "
-            "или уже завершён."
+            "⌛ Вызов истёк или уже завершён."
         )
 
     elif outcome == "wrong_user":
-
         await message.answer(
             f"{html_tag(call.from_user)}, "
             "это не твой вызов! 👺"
         )
 
     elif outcome == "no_money":
-
-        with contextlib.suppress(
-            Exception
-        ):
+        with contextlib.suppress(Exception):
             await message.edit_text(
                 "💸 Дуэль отменена: "
                 "один из участников успел обнищать."
@@ -4000,12 +3972,10 @@ async def d_accept(
         "accepted",
         "already_fighting",
     }:
-
         await show_shoot_round(
             message,
             duel,
         )
-
 
 # ------------------------------------------------------------
 # DUEL SHOOT
