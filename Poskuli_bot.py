@@ -2019,7 +2019,7 @@ async def play_casino(
                     payout = int(
                         value
                         * (
-                            1.2
+                            1.5
                             if is_all_in
                             else 2.0
                         )
@@ -2442,7 +2442,6 @@ async def architect_take_db(
         "Казна довольно урчит. 🏦"
     )
 
-
 # ============================================================
 # MUTE
 # ============================================================
@@ -2496,51 +2495,86 @@ async def mute_user(
         )
         return
 
-    allowed, role_or_message = (
-        await can_architect_or_olympian_mute(
-            message,
-            seconds,
-        )
-    )
+    moderator = message.from_user
+    target = message.reply_to_message.from_user
 
-    if not allowed:
-        await message.answer(
-            role_or_message
-        )
-        return
+    # --------------------------------------------------------
+    # ЗАЩИТА ЦЕЛИ
+    # --------------------------------------------------------
 
-    target = (
-        message
-        .reply_to_message
-        .from_user
-    )
-
-    if target.id == message.from_user.id:
+    if target.id == moderator.id:
         await message.answer(
             "🤡 Самомут? Ты ебанат что ли блядь?!"
         )
         return
 
+    # Архитектора нельзя мутить вообще.
+    if target.id == ARCHITECT_ID:
+        await message.answer(
+            "🛡️ Архитектора мутить нельзя."
+        )
+        return
+
+    # Админов и создателя чата нельзя мутить вообще.
     if await is_chat_admin(
         message.chat.id,
         target.id,
     ):
         await message.answer(
-            "🛡️ Админов/создателя чата "
-            "мутить нельзя. Ебанулся что ли?!"
+            "🛡️ Админов и создателя чата "
+            "мутить нельзя."
         )
         return
 
-    try:
+    # --------------------------------------------------------
+    # ПРАВА МОДЕРАТОРА
+    # --------------------------------------------------------
 
+    is_architect = (
+        moderator.id == ARCHITECT_ID
+    )
+
+    is_admin = await is_chat_admin(
+        message.chat.id,
+        moderator.id,
+    )
+
+    if is_architect or is_admin:
+        # Архитектор и админы могут мутить
+        # на любой допустимый parse_mute_seconds срок.
+        allowed = True
+        moderator_role = (
+            "architect"
+            if is_architect
+            else "chat_admin"
+        )
+
+    else:
+        # Не админ -> проверяем Олимпийца.
+        allowed, moderator_role = (
+            await can_architect_or_olympian_mute(
+                message,
+                seconds,
+            )
+        )
+
+    if not allowed:
+        await message.answer(
+            moderator_role
+        )
+        return
+
+    # --------------------------------------------------------
+    # TELEGRAM MUTE
+    # --------------------------------------------------------
+
+    try:
         await bot.restrict_chat_member(
             chat_id=message.chat.id,
             user_id=target.id,
             permissions=MUTED_CHAT_PERMISSIONS,
             until_date=(
-                datetime.now(
-                    timezone.utc
-                )
+                datetime.now(timezone.utc)
                 + timedelta(
                     seconds=seconds
                 )
@@ -2549,7 +2583,6 @@ async def mute_user(
         )
 
     except Exception as exc:
-
         logger.exception(
             "Ошибка мута"
         )
@@ -2558,9 +2591,9 @@ async def mute_user(
             "⚠️ Не смог замутить. "
             "Проверь, что бот — администратор "
             "с правом ограничивать участников.\n"
-            f"Ошибка: <code>{escape(str(exc))}</code>"
+            f"Ошибка: "
+            f"<code>{escape(str(exc))}</code>"
         )
-
         return
 
     await message.answer(
@@ -2568,7 +2601,7 @@ async def mute_user(
         f"хуесос отправлен под шконарь "
         f"на <b>{seconds} сек.</b>\n"
         f"Исполнитель: "
-        f"{html_tag(message.from_user)}"
+        f"{html_tag(moderator)}"
     )
 
 
@@ -2577,15 +2610,21 @@ async def mute_user(
 # ============================================================
 
 @dp.message(Command("unmute"))
-@dp.message(F.text.lower() == "-мут")
+@dp.message(
+    F.text.lower() == "-мут"
+)
 async def unmute_user(
     message: Message,
 ) -> None:
 
-    if (
-        message.from_user is None
-        or not is_group(message)
-    ):
+    if message.from_user is None:
+        return
+
+    if not is_group(message):
+        await message.answer(
+            "⚠️ Размут работает только "
+            "в группе или супергруппе."
+        )
         return
 
     if (
@@ -2601,11 +2640,7 @@ async def unmute_user(
         return
 
     moderator = message.from_user
-    target = (
-        message
-        .reply_to_message
-        .from_user
-    )
+    target = message.reply_to_message.from_user
 
     if moderator.id == target.id:
         await message.answer(
@@ -2614,52 +2649,72 @@ async def unmute_user(
         )
         return
 
-    moderator_user = await get_u(
-        moderator.id
-    )
-
-    if moderator_user is None:
-        await message.answer(
-            "⚠️ Ты не зарегистрирован. "
-            "/skulistart"
-        )
-        return
+    # --------------------------------------------------------
+    # ПРАВА МОДЕРАТОРА
+    # --------------------------------------------------------
 
     is_architect = (
-        moderator.id
-        == ARCHITECT_ID
+        moderator.id == ARCHITECT_ID
     )
 
-    is_olympian = (
-        moderator_user["status"]
-        == "olympian"
+    is_admin = await is_chat_admin(
+        message.chat.id,
+        moderator.id,
     )
+
+    is_olympian = False
+
+    # Админу и Архитектору регистрация
+    # для модерации не нужна.
+    if not is_architect and not is_admin:
+
+        moderator_user = await get_u(
+            moderator.id
+        )
+
+        if moderator_user is not None:
+            is_olympian = (
+                moderator_user["status"]
+                == "olympian"
+            )
 
     if (
         not is_architect
+        and not is_admin
         and not is_olympian
     ):
         await message.answer(
-            "🚫 Ты куда полез, "
-            "скотина припизднутая?!"
+            "🚫 Размут доступен только "
+            "Архитектору, администратору чата "
+            "или Олимпийцу."
         )
         return
 
-    if (
-        not is_architect
-        and await is_chat_admin(
-            message.chat.id,
-            target.id,
+    # Не даём игровым ролям лезть в админов.
+    # Админ чата технически тоже не нуждается
+    # в размуте другого админа.
+    if target.id == ARCHITECT_ID:
+        await message.answer(
+            "🛡️ Архитектор не нуждается "
+            "в такой амнистии."
         )
+        return
+
+    if await is_chat_admin(
+        message.chat.id,
+        target.id,
     ):
         await message.answer(
-            "⚡️ Олимпийцы не могут "
-            "размутить админов."
+            "🛡️ Админов и создателя чата "
+            "через эту команду не трогаем."
         )
         return
 
-    try:
+    # --------------------------------------------------------
+    # TELEGRAM UNMUTE
+    # --------------------------------------------------------
 
+    try:
         chat_info = await bot.get_chat(
             message.chat.id
         )
@@ -2677,7 +2732,6 @@ async def unmute_user(
         )
 
     except Exception as exc:
-
         logger.exception(
             "Ошибка размута"
         )
@@ -2687,7 +2741,6 @@ async def unmute_user(
             f"Причина: "
             f"<code>{escape(str(exc))}</code>"
         )
-
         return
 
     await message.answer(
@@ -2703,20 +2756,14 @@ async def unmute_user(
 # ============================================================
 
 @dp.message(Command("ban"))
-@dp.message(F.text.lower() == "+бан")
+@dp.message(
+    F.text.lower() == "+бан"
+)
 async def ban_user(
     message: Message,
 ) -> None:
 
-    if (
-        message.from_user is None
-        or message.from_user.id
-        != ARCHITECT_ID
-    ):
-        await message.answer(
-            "🚫 Банхаммер хранится "
-            "только у Архитектора."
-        )
+    if message.from_user is None:
         return
 
     if not is_group(message):
@@ -2726,14 +2773,42 @@ async def ban_user(
         )
         return
 
+    moderator = message.from_user
+
+    # --------------------------------------------------------
+    # ПРАВА МОДЕРАТОРА
+    # --------------------------------------------------------
+
+    is_architect = (
+        moderator.id == ARCHITECT_ID
+    )
+
+    is_admin = await is_chat_admin(
+        message.chat.id,
+        moderator.id,
+    )
+
+    if (
+        not is_architect
+        and not is_admin
+    ):
+        await message.answer(
+            "🚫 Бан доступен только "
+            "Архитектору или "
+            "администратору чата."
+        )
+        return
+
     if (
         not message.reply_to_message
         or not message.reply_to_message.from_user
     ):
         await message.answer(
             "⚠️ Бан делается ответом "
-            "на сообщение юзера: "
-            "<code>+бан</code>"
+            "на сообщение юзера:\n"
+            "<code>+бан</code>\n"
+            "или\n"
+            "<code>/ban</code>"
         )
         return
 
@@ -2743,49 +2818,64 @@ async def ban_user(
         .from_user
     )
 
-    if target.id == message.from_user.id:
+    # --------------------------------------------------------
+    # ЗАЩИТА ЦЕЛИ
+    # --------------------------------------------------------
+
+    if target.id == moderator.id:
         await message.answer(
             "🤡 Самобан — сильно, "
             "почти как самодрочь, но нет."
         )
         return
 
+    # Архитектора нельзя банить.
+    if target.id == ARCHITECT_ID:
+        await message.answer(
+            "🛡️ Архитектора банить нельзя."
+        )
+        return
+
+    # Никаких банов админов/создателя.
     if await is_chat_admin(
         message.chat.id,
         target.id,
     ):
         await message.answer(
-            "🛡️ Админов/создателя чата "
-            "банить нельзя, ты охуел?!"
+            "🛡️ Админов и создателя чата "
+            "банить нельзя."
         )
         return
 
-    try:
+    # --------------------------------------------------------
+    # TELEGRAM BAN
+    # --------------------------------------------------------
 
+    try:
         await bot.ban_chat_member(
-            message.chat.id,
-            target.id,
+            chat_id=message.chat.id,
+            user_id=target.id,
         )
 
     except Exception as exc:
-
         logger.exception(
             "Ошибка бана"
         )
 
         await message.answer(
             "⚠️ Не смог забанить. "
-            "Проверь права бота.\n"
+            "Проверь, что бот — администратор "
+            "с правом блокировать участников.\n"
             f"Ошибка: "
             f"<code>{escape(str(exc))}</code>"
         )
-
         return
 
     await message.answer(
         f"🔨 {html_tag(target)} "
-        "улетел из чата. "
-        "Архитектор стукнул по ебалу хуебеса. 🌚"
+        "улетел из чата.\n"
+        f"⚖️ Исполнитель: "
+        f"{html_tag(moderator)}"
     )
 
 
